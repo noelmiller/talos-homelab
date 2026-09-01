@@ -17,18 +17,36 @@ spec:
         devices:
           interfaces:
             - name: default
+              macAddress: "02:00:00:00:00:10"
               masquerade: {}
               ports:
                 - port: 8080
+            - name: lan
+              macAddress: "02:00:00:00:00:11"
+              bridge: {}
       networks:
         - name: default
           pod: {}
+        - name: lan
+          multus:
+            networkName: lan
       volumes:
         - name: rootdisk
           containerDisk:
             image: quay.io/containerdisks/fedora:latest
         - name: cloudinit
           cloudInitNoCloud:
+            networkData: |
+              version: 2
+              ethernets:
+                pod0:
+                  match:
+                    macaddress: "02:00:00:00:00:10"
+                  dhcp4: true
+                lan0:
+                  match:
+                    macaddress: "02:00:00:00:00:11"
+                  dhcp4: true
             userData: |
               #cloud-config
               write_files:

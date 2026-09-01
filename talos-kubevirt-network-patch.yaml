@@ -1,0 +1,21 @@
+machine:
+  kubelet:
+    registerWithFQDN: true
+  network:
+    interfaces:
+      - interface: enp6s0
+        dhcp: false
+      - interface: br0
+        addresses:
+          - 10.42.0.2/24
+        bridge:
+          stp:
+            enabled: true
+          interfaces:
+            - enp6s0
+        routes:
+          - network: 0.0.0.0/0
+            gateway: 10.42.0.1
+            metric: 1024
+    nameservers:
+      - 10.42.0.1

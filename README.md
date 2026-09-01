@@ -181,6 +181,19 @@ ArgoCD polls the repo and auto-syncs + self-heals drift. Force an immediate sync
 
 - The cluster's MetalLB pool (`10.42.0.11-10.42.0.48`) is **private/LAN-only** — reachable from your home network, not the public internet. For external access you'd additionally need a public DNS record and port-forwarding/tunnel (e.g. Cloudflare Tunnel) — not currently configured.
 - Point any local DNS override (e.g. a router's custom DNS zone) at the **Gateway/Traefik Service's external IP** (`kubectl -n traefik get svc traefik`), not the node's own IP — they're not the same thing, and only the Service IP has anything actually listening on 80/443.
+- KubeVirt VMs use the Talos-managed `br0` bridge and the `lan` Multus network to join the physical LAN. Apply [talos-kubevirt-network-patch.yaml](talos-kubevirt-network-patch.yaml) to move the node address and default route from `enp6s0` to `br0`:
+  ```bash
+  talosctl machineconfig patch controlplane.yaml \
+    --patch @talos-kubevirt-network-patch.yaml \
+    --output controlplane-kubevirt.yaml
+  yq eval -i \
+    '(. | select(.kind == "HostnameConfig")) |= (del(.auto) | .hostname = "k8s.noelmiller.dev")' \
+    controlplane-kubevirt.yaml
+  talosctl validate --config controlplane-kubevirt.yaml --mode metal --strict
+  talosctl --talosconfig talosconfig -n 10.42.0.2 apply-config \
+    --mode try --timeout 5m --file controlplane-kubevirt.yaml
+  ```
+  Verify `br0`, node health, and Kubernetes access before the timeout. Talos automatically rolls the change back if connectivity is lost. The node's original bare-metal network configuration may also exist in META key `0x0a`; back it up with `talosctl get meta 0x0a -o yaml`, then remove it with `talosctl meta delete 0x0a` to prevent the node IP from being assigned to both `enp6s0` and `br0`. Once only `br0` owns the address and the cluster is healthy, persist the full generated config with `apply-config --mode auto`.
 
 ## Security notes
 
