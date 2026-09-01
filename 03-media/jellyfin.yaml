@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: jellyfin
-          image: lscr.io/linuxserver/jellyfin:latest
+          image: lscr.io/linuxserver/jellyfin:10.11.11@sha256:4f6d8dfc53ec5a1ddf7a90e4338972d57d7b0adff6dc88b53184f8285d0b594f
           securityContext:
             # hostPath device mounts aren't enough; the container needs this to
             # bypass Kubernetes' device cgroup and actually open /dev/dri/renderD128.

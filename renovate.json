@@ -1,0 +1,26 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "timezone": "America/Chicago",
+  "schedule": ["every weekend"],
+  "kubernetes": {
+    "managerFilePatterns": ["/^03-media/.+\\.yaml$/", "/^05-dashboard/.+\\.yaml$/"]
+  },
+  "packageRules": [
+    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["lscr.io/linuxserver/**"],
+      "groupName": "media stack",
+      "pinDigests": true
+    },
+    {
+      "matchManagers": ["kustomize"],
+      "matchDepTypes": ["HelmChart"],
+      "groupName": "cluster helm charts"
+    },
+    {
+      "matchFileNames": ["**/charts/**"],
+      "enabled": false
+    }
+  ]
+}
