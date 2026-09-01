@@ -1,0 +1,27 @@
+- Media:
+    - Jellyfin:
+        href: https://jellyfin.k8s.noelmiller.dev
+        description: Watch movies & TV
+        icon: jellyfin.png
+    - Sonarr:
+        href: https://sonarr.k8s.noelmiller.dev
+        description: TV show management
+        icon: sonarr.png
+    - Radarr:
+        href: https://radarr.k8s.noelmiller.dev
+        description: Movie management
+        icon: radarr.png
+    - Prowlarr:
+        href: https://prowlarr.k8s.noelmiller.dev
+        description: Indexer management
+        icon: prowlarr.png
+    - SABnzbd:
+        href: https://sabnzbd.k8s.noelmiller.dev
+        description: Usenet download client
+        icon: sabnzbd.png
+
+- Cluster:
+    - ArgoCD:
+        href: https://argocd.k8s.noelmiller.dev
+        description: GitOps deployment dashboard
+        icon: argo-cd.png
