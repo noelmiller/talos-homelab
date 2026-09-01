@@ -1,10 +1,10 @@
 - Reference:
     - GitHub Repo:
-        href: https://github.com/noelmiller/talos-homelab
-        icon: github.png
+        - href: https://github.com/noelmiller/talos-homelab
+          icon: github.png
     - Talos Docs:
-        href: https://www.talos.dev/latest/
-        icon: si-talos.png
+        - href: https://www.talos.dev/latest/
+          icon: si-talos.png
     - Kubernetes Docs:
-        href: https://kubernetes.io/docs/home/
-        icon: kubernetes.png
+        - href: https://kubernetes.io/docs/home/
+          icon: kubernetes.png
