@@ -19,6 +19,8 @@ local-storage-patch.yaml         Talos UserVolumeConfig patch for the 3 data dis
 02-configuration/                 Cluster-wide config: storage classes, Gateway, MetalLB pool, ClusterIssuer
 03-media/                         Media app stack (Jellyfin/Sonarr/Radarr/Prowlarr/SABnzbd)
 04-gitops/                        ArgoCD app-of-apps definitions
+05-dashboard/                     Homepage cluster dashboard
+06-virtualization/                KubeVirt, CDI, Multus, and kubevirt-manager
 ```
 
 ## Prerequisites
@@ -167,7 +169,7 @@ Once ArgoCD is running (from step 3), bootstrap the app-of-apps pattern **once**
 kubectl apply -f 04-gitops/root-app.yaml
 ```
 
-This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
+This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, and `virtualization`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
 
 From here on, the workflow is just:
 
@@ -181,6 +183,7 @@ ArgoCD polls the repo and auto-syncs + self-heals drift. Force an immediate sync
 
 - The cluster's MetalLB pool (`10.42.0.11-10.42.0.48`) is **private/LAN-only** — reachable from your home network, not the public internet. For external access you'd additionally need a public DNS record and port-forwarding/tunnel (e.g. Cloudflare Tunnel) — not currently configured.
 - Point any local DNS override (e.g. a router's custom DNS zone) at the **Gateway/Traefik Service's external IP** (`kubectl -n traefik get svc traefik`), not the node's own IP — they're not the same thing, and only the Service IP has anything actually listening on 80/443.
+- KubeVirt Manager is available at `https://kubevirt.k8s.noelmiller.dev` and is intended only for the trusted LAN. It has broad VM-management permissions and does not enable authentication by default.
 - KubeVirt VMs use the Talos-managed `br0` bridge and the `lan` Multus network to join the physical LAN. Apply [talos-kubevirt-network-patch.yaml](talos-kubevirt-network-patch.yaml) to move the node address and default route from `enp6s0` to `br0`:
   ```bash
   talosctl machineconfig patch controlplane.yaml \
