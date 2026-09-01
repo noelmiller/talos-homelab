@@ -7,6 +7,7 @@ resources:
   - kubevirt-cr.yaml
   - https://github.com/kubevirt/containerized-data-importer/releases/download/v1.66.0/cdi-operator.yaml
   - cdi-cr.yaml
+  - lan-network.yaml
   - web-test-vm.yaml
 
 images:
