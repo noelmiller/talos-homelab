@@ -5,7 +5,9 @@ metadata:
   namespace: kubevirt-manager
 spec:
   parentRefs:
-    - name: main-gateway
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: main-gateway
       namespace: default
       sectionName: websecure
   hostnames:
@@ -16,5 +18,8 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: kubevirt-manager
+        - group: ""
+          kind: Service
+          name: kubevirt-manager
           port: 8080
+          weight: 1
