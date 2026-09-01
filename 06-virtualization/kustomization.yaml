@@ -2,12 +2,35 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
+  - https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/v4.3.0/deployments/multus-daemonset-thick.yml
   - https://github.com/kubevirt/kubevirt/releases/download/v1.9.0/kubevirt-operator.yaml
   - kubevirt-cr.yaml
   - https://github.com/kubevirt/containerized-data-importer/releases/download/v1.66.0/cdi-operator.yaml
   - cdi-cr.yaml
 
+images:
+  - name: ghcr.io/k8snetworkplumbingwg/multus-cni
+    newTag: v4.3.0-thick
+
 patches:
+  - patch: |-
+      apiVersion: apps/v1
+      kind: DaemonSet
+      metadata:
+        name: kube-multus-ds
+        namespace: kube-system
+      spec:
+        template:
+          spec:
+            containers:
+              - name: kube-multus
+                resources:
+                  requests:
+                    cpu: 200m
+                    memory: 100Mi
+                  limits:
+                    cpu: 300m
+                    memory: 150Mi
   # virt-handler and CDI importer/uploader pods need privileged access (KVM, /dev, hostPID)
   - patch: |-
       apiVersion: v1
