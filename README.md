@@ -148,7 +148,7 @@ Every app's `HTTPRoute` attaches to `main-gateway`'s `websecure` listener and in
 
 ## 5. Media stack (`03-media`)
 
-Jellyfin, Ombi, SABnzbd, Sonarr, Radarr, and Prowlarr. The download and library apps share one bulk `sata-8tb` PVC mounted at `/data` (same filesystem, so completed downloads move instead of copy into the library). Jellyfin additionally mounts `/dev/dri` (`securityContext.privileged: true` — required, hostPath alone doesn't bypass Kubernetes' device cgroup) for VAAPI hardware transcoding. Ombi stores its request database on a dedicated config PVC and communicates with the other apps over their cluster Services.
+Jellyfin, Ombi, SABnzbd, Sonarr, Radarr, and Prowlarr. The download and library apps share one bulk `sata-8tb` PVC mounted at `/data` (same filesystem, so completed downloads move instead of copy into the library). Jellyfin additionally mounts `/dev/dri` (`securityContext.privileged: true` — required, hostPath alone doesn't bypass Kubernetes' device cgroup) for VAAPI hardware transcoding. Ombi uses a dedicated MySQL 8.4 database on NVMe storage and communicates with the other apps over their cluster Services.
 
 A one-shot [bootstrap Job](03-media/bootstrap-job.yaml) wires the apps together after first deploy (SABnzbd categories/paths, Sonarr/Radarr download client + root folder, Prowlarr → Sonarr/Radarr application sync) by reading each app's auto-generated API key from its config PVC. It's idempotent but **Jobs are immutable** — if you change `03-media/bootstrap-script.sh`, you must delete the old Job before ArgoCD/kubectl can recreate it:
 
@@ -161,6 +161,8 @@ Manual, one-time setup still required per app (can't be scripted without your ow
 - Prowlarr: add your indexer(s) — syncs to Sonarr/Radarr automatically
 - Jellyfin: finish the setup wizard, add libraries pointing at `/data/media/{tv,movies}`, then enable VAAPI hardware acceleration (Dashboard → Playback → `/dev/dri/renderD128`, H264 + HEVC only — this GPU generation cannot **encode** AV1, only decode it)
 - Ombi: open `https://ombi.k8s.noelmiller.dev`, create the administrator account, then connect Jellyfin (`http://jellyfin.media.svc.cluster.local:8096`), Sonarr (`http://sonarr.media.svc.cluster.local:8989`), and Radarr (`http://radarr.media.svc.cluster.local:7878`) in Settings. Use each app's API key and enable Jellyfin user authentication so users can sign in and submit requests.
+
+Ombi's three logical databases share the MySQL instance because their table names do not overlap. The database and user are created automatically with `utf8mb4`, as recommended by Ombi. Credentials and the generated `database.json` are stored in `sealed-ombi-mysql-secret.yaml`, encrypted for this cluster. Moving from the default SQLite database does not migrate existing Ombi data; if Ombi was configured before MySQL was deployed, repeat the setup wizard or follow Ombi's database migration guide.
 
 ## 6. GitOps (`04-gitops`)
 
