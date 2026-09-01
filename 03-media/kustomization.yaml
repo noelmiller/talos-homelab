@@ -9,6 +9,8 @@ resources:
   - sonarr.yaml
   - radarr.yaml
   - prowlarr.yaml
+  - sealed-ombi-mysql-secret.yaml
+  - ombi-mysql.yaml
   - ombi.yaml
   - bootstrap-job.yaml
 

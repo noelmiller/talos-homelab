@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ombi-mysql
+  namespace: media
+spec:
+  serviceName: ombi-mysql
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ombi-mysql
+  template:
+    metadata:
+      labels:
+        app: ombi-mysql
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:8.4@sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb
+          args:
+            - --character-set-server=utf8mb4
+            - --collation-server=utf8mb4_unicode_ci
+          env:
+            - name: MYSQL_DATABASE
+              value: ombi
+            - name: MYSQL_USER
+              value: ombi
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ombi-mysql
+                  key: mysql-password
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ombi-mysql
+                  key: mysql-root-password
+          ports:
+            - name: mysql
+              containerPort: 3306
+          startupProbe:
+            tcpSocket:
+              port: mysql
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket:
+              port: mysql
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: mysql
+            periodSeconds: 30
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: ombi-mysql-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ombi-mysql
+  namespace: media
+spec:
+  clusterIP: None
+  selector:
+    app: ombi-mysql
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: mysql
