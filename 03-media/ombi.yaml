@@ -31,20 +31,10 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /config
-            - name: database-config
-              mountPath: /config/database.json
-              subPath: database.json
-              readOnly: true
       volumes:
         - name: config
           persistentVolumeClaim:
             claimName: ombi-config
-        - name: database-config
-          secret:
-            secretName: ombi-mysql
-            items:
-              - key: database.json
-                path: database.json
 ---
 apiVersion: v1
 kind: Service
