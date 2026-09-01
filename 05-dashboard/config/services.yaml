@@ -25,3 +25,6 @@
         href: https://argocd.k8s.noelmiller.dev
         description: GitOps deployment dashboard
         icon: argo-cd.png
+    - KubeVirt Manager:
+        href: https://kubevirt.k8s.noelmiller.dev
+        description: Virtual machine management
