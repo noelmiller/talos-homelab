@@ -9,6 +9,7 @@ resources:
   - sonarr.yaml
   - radarr.yaml
   - prowlarr.yaml
+  - ombi.yaml
   - bootstrap-job.yaml
 
 configMapGenerator:

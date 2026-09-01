@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ombi
+  namespace: media
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ombi
+  template:
+    metadata:
+      labels:
+        app: ombi
+    spec:
+      containers:
+        - name: ombi
+          image: lscr.io/linuxserver/ombi:v4.53.10-ls267@sha256:a6f76ac521ba01eee2e9f0c23a3fed22e56630d97a04d5eeaeaa36c1e681640d
+          env:
+            - name: PUID
+              value: "1000"
+            - name: PGID
+              value: "1000"
+            - name: TZ
+              value: "America/Chicago"
+          ports:
+            - name: http
+              containerPort: 3579
+          volumeMounts:
+            - name: config
+              mountPath: /config
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: ombi-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ombi
+  namespace: media
+spec:
+  selector:
+    app: ombi
+  ports:
+    - name: http
+      port: 3579
+      targetPort: 3579
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ombi
+  namespace: media
+spec:
+  parentRefs:
+    - name: main-gateway
+      namespace: default
+      sectionName: websecure
+  hostnames:
+    - ombi.k8s.noelmiller.dev
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ombi
+          port: 3579
