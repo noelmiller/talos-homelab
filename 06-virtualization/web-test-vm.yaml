@@ -1,0 +1,78 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: web-test
+  namespace: default
+spec:
+  runStrategy: Always
+  template:
+    metadata:
+      labels:
+        app: web-test
+    spec:
+      domain:
+        resources:
+          requests:
+            memory: 512Mi
+        devices:
+          interfaces:
+            - name: default
+              masquerade: {}
+              ports:
+                - port: 8080
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          containerDisk:
+            image: quay.io/containerdisks/fedora:latest
+        - name: cloudinit
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              write_files:
+                - path: /var/www/html/index.html
+                  content: |
+                    <!doctype html>
+                    <html lang="en">
+                    <head><title>KubeVirt Test VM</title></head>
+                    <body><h1>KubeVirt test VM is running</h1></body>
+                    </html>
+              runcmd:
+                - mkdir -p /var/www/html
+                - systemd-run --unit=vm-web --property=Restart=always /usr/bin/python3 -m http.server 8080 --directory /var/www/html
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-test
+  namespace: default
+spec:
+  selector:
+    app: web-test
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: web-test
+  namespace: default
+spec:
+  parentRefs:
+    - name: main-gateway
+      namespace: default
+      sectionName: websecure
+  hostnames:
+    - vm-test.k8s.noelmiller.dev
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: web-test
+          port: 8080
