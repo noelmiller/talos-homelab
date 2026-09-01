@@ -63,7 +63,9 @@ metadata:
   namespace: default
 spec:
   parentRefs:
-    - name: main-gateway
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: main-gateway
       namespace: default
       sectionName: websecure
   hostnames:
@@ -74,5 +76,8 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: web-test
+        - group: ""
+          kind: Service
+          name: web-test
           port: 8080
+          weight: 1
