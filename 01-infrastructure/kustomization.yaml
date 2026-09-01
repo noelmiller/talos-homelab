@@ -6,6 +6,7 @@ resources:
   - https://raw.githubusercontent.com/metallb/metallb/v0.16.1/config/manifests/metallb-native.yaml
   - https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.1/standard-install.yaml
   - cert-manager-namespace.yaml
+  - argocd-namespace.yaml
 
 helmCharts:
   - name: traefik
@@ -68,6 +69,23 @@ helmCharts:
     valuesInline:
       crds:
         enabled: true
+
+  - name: argo-cd
+    repo: https://argoproj.github.io/argo-helm
+    releaseName: argocd
+    namespace: argocd
+    version: 10.5.0
+    includeCRDs: true
+    valuesInline:
+      global:
+        domain: argocd.k8s.noelmiller.dev
+      configs:
+        params:
+          # TLS is terminated at the Traefik gateway; ArgoCD serves plain HTTP behind it.
+          server.insecure: true
+        cm:
+          # our kustomizations use helmCharts, ArgoCD needs this to build them
+          kustomize.buildOptions: "--enable-helm"
 
 patches:
   - patch: |-

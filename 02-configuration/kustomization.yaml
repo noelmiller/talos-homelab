@@ -8,3 +8,4 @@ resources:
   - sealed-cloudflare-secret.yaml
   - sealed-cloudflare-secret-cert-manager.yaml
   - cluster-issuer.yaml
+  - argocd-route.yaml
