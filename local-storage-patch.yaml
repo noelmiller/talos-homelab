@@ -1,0 +1,26 @@
+apiVersion: v1alpha1
+kind: UserVolumeConfig
+name: nvme-2tb
+provisioning:
+  diskSelector:
+    match: disk.wwid == 'eui.000000000000000100a0752133e574c3'
+  minSize: 1800GiB
+  maxSize: 1850GiB
+---
+apiVersion: v1alpha1
+kind: UserVolumeConfig
+name: sata-8tb
+provisioning:
+  diskSelector:
+    match: disk.wwid == 'naa.5002538f33b14c59'
+  minSize: 7000GiB
+  maxSize: 7400GiB
+---
+apiVersion: v1alpha1
+kind: UserVolumeConfig
+name: sata-1tb
+provisioning:
+  diskSelector:
+    match: disk.wwid == 'naa.500a0751e8b00131'
+  minSize: 900GiB
+  maxSize: 925GiB

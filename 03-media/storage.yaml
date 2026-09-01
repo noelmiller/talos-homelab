@@ -1,0 +1,81 @@
+# Shared bulk media/downloads volume — mounted read-write by both Jellyfin and SABnzbd
+# so completed downloads can be moved (not copied) into the media library.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: media-library
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: sata-8tb
+  resources:
+    requests:
+      # local-path-provisioner doesn't enforce quotas; this is nominal.
+      storage: 6500Gi
+---
+# Fast storage for Jellyfin's metadata DB, thumbnails, and transcode cache.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jellyfin-config
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nvme-2tb
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sabnzbd-config
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: sata-1tb
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sonarr-config
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: sata-1tb
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: radarr-config
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: sata-1tb
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prowlarr-config
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: sata-1tb
+  resources:
+    requests:
+      storage: 5Gi

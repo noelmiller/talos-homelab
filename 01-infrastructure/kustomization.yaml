@@ -1,0 +1,111 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.37/deploy/local-path-storage.yaml
+  - https://raw.githubusercontent.com/metallb/metallb/v0.16.1/config/manifests/metallb-native.yaml
+  - https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.1/standard-install.yaml
+  - cert-manager-namespace.yaml
+
+helmCharts:
+  - name: traefik
+    repo: https://helm.traefik.io/traefik
+    releaseName: traefik
+    namespace: traefik
+    version: 41.2.0
+    valuesInline:
+      providers:
+        kubernetesCRD:
+          enabled: false
+        kubernetesIngress:
+          enabled: false
+        kubernetesGateway:
+          enabled: true
+      service:
+        type: LoadBalancer
+      ports:
+        web:
+          port: 8000
+          expose:
+            default: true
+          exposedPort: 80
+        websecure:
+          port: 8443
+          expose:
+            default: true
+          exposedPort: 443
+      persistence:
+        enabled: true
+        storageClass: sata-1tb
+        size: 128Mi
+        path: /data
+      additionalArguments:
+        # 1. HTTP to HTTPS Redirection
+        - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+        - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+        # 2. ACME / Let's Encrypt Configuration
+        - "--certificatesresolvers.letsencrypt.acme.email=noel@noelmiller.dev"
+        - "--certificatesresolvers.letsencrypt.acme.storage=/data/acme.json"
+        - "--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare"
+        - "--certificatesresolvers.letsencrypt.acme.dnschallenge.delaybeforecheck=0"
+      envFrom:
+        - secretRef:
+            name: cloudflare-api-token
+  
+  - name: sealed-secrets
+    repo: https://bitnami.github.io/sealed-secrets
+    releaseName: sealed-secrets
+    namespace: kube-system
+    version: 2.16.1
+    includeCRDs: true
+
+  - name: cert-manager
+    repo: https://charts.jetstack.io
+    releaseName: cert-manager
+    namespace: cert-manager
+    version: v1.21.1
+    includeCRDs: true
+    valuesInline:
+      crds:
+        enabled: true
+
+patches:
+  - patch: |-
+      kind: ConfigMap
+      apiVersion: v1
+      metadata:
+        name: local-path-config
+        namespace: local-path-storage
+      data:
+        config.json: |-
+          {
+            "nodePathMap": [],
+            "storageClassConfigs": {
+              "nvme-2tb": {
+                "nodePathMap": [{"node": "DEFAULT_PATH_FOR_NON_LISTED_NODES", "paths": ["/var/mnt/nvme-2tb"]}]
+              },
+              "sata-8tb": {
+                "nodePathMap": [{"node": "DEFAULT_PATH_FOR_NON_LISTED_NODES", "paths": ["/var/mnt/sata-8tb"]}]
+              },
+              "sata-1tb": {
+                "nodePathMap": [{"node": "DEFAULT_PATH_FOR_NON_LISTED_NODES", "paths": ["/var/mnt/sata-1tb"]}]
+              }
+            }
+          }
+  - patch: |-
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: local-path-storage
+        labels:
+          pod-security.kubernetes.io/enforce: privileged
+  - patch: |-
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: metallb-system
+        labels:
+          pod-security.kubernetes.io/enforce: privileged
+          pod-security.kubernetes.io/audit: privileged
+          pod-security.kubernetes.io/warn: privileged
+

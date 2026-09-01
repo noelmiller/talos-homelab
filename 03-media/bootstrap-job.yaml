@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: media-bootstrap
+  namespace: media
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: bootstrap
+          image: curlimages/curl:8.11.0
+          command: ["/bin/sh", "/scripts/bootstrap-script.sh"]
+          securityContext:
+            # needs root to chown shared library folders to the app's PUID/PGID
+            runAsUser: 0
+          env:
+            # Hosts SABnzbd will accept in the HTTP Host header (its own reverse-proxy guard).
+            - name: SAB_HOST_WHITELIST
+              value: "sabnzbd.k8s.noelmiller.dev,sabnzbd,sabnzbd.media,sabnzbd.media.svc.cluster.local,"
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+            - name: sab-config
+              mountPath: /sab-config
+              readOnly: true
+            - name: sonarr-config
+              mountPath: /sonarr-config
+              readOnly: true
+            - name: radarr-config
+              mountPath: /radarr-config
+              readOnly: true
+            - name: prowlarr-config
+              mountPath: /prowlarr-config
+              readOnly: true
+            - name: library
+              mountPath: /data
+      volumes:
+        - name: script
+          configMap:
+            name: media-bootstrap-script
+            defaultMode: 0755
+        - name: sab-config
+          persistentVolumeClaim:
+            claimName: sabnzbd-config
+        - name: sonarr-config
+          persistentVolumeClaim:
+            claimName: sonarr-config
+        - name: radarr-config
+          persistentVolumeClaim:
+            claimName: radarr-config
+        - name: prowlarr-config
+          persistentVolumeClaim:
+            claimName: prowlarr-config
+        - name: library
+          persistentVolumeClaim:
+            claimName: media-library

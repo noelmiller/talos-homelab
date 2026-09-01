@@ -1,0 +1,5 @@
+**/charts/
+talosconfig
+controlplane.yaml
+worker.yaml
+cloudflare-secret.yaml
