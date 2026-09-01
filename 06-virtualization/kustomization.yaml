@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - https://github.com/kubevirt/kubevirt/releases/download/v1.9.0/kubevirt-operator.yaml
+  - kubevirt-cr.yaml
+  - https://github.com/kubevirt/containerized-data-importer/releases/download/v1.66.0/cdi-operator.yaml
+  - cdi-cr.yaml
+
+patches:
+  # virt-handler and CDI importer/uploader pods need privileged access (KVM, /dev, hostPID)
+  - patch: |-
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: kubevirt
+        labels:
+          pod-security.kubernetes.io/enforce: privileged
+          pod-security.kubernetes.io/audit: privileged
+          pod-security.kubernetes.io/warn: privileged
+  - patch: |-
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: cdi
+        labels:
+          pod-security.kubernetes.io/enforce: privileged
+          pod-security.kubernetes.io/audit: privileged
+          pod-security.kubernetes.io/warn: privileged
