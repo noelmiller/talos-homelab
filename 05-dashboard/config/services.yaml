@@ -3,6 +3,10 @@
         href: https://jellyfin.k8s.noelmiller.dev
         description: Watch movies & TV
         icon: jellyfin.png
+    - Ombi:
+        href: https://ombi.k8s.noelmiller.dev
+        description: Request movies & TV
+        icon: ombi.png
     - Sonarr:
         href: https://sonarr.k8s.noelmiller.dev
         description: TV show management
