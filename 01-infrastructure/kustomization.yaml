@@ -5,6 +5,7 @@ resources:
   - https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.37/deploy/local-path-storage.yaml
   - https://raw.githubusercontent.com/metallb/metallb/v0.16.1/config/manifests/metallb-native.yaml
   - https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.1/standard-install.yaml
+  - traefik-namespace.yaml
   - cert-manager-namespace.yaml
   - argocd-namespace.yaml
 
