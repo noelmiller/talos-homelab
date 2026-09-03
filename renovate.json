@@ -4,13 +4,19 @@
   "timezone": "America/Chicago",
   "schedule": ["every weekend"],
   "kubernetes": {
-    "managerFilePatterns": ["/^03-media/.+\\.yaml$/", "/^05-dashboard/.+\\.yaml$/"]
+    "managerFilePatterns": ["/^03-media/.+\\.yaml$/", "/^05-dashboard/.+\\.yaml$/", "/^07-minecraft/.+\\.yaml$/"]
   },
   "packageRules": [
     {
       "matchDatasources": ["docker"],
       "matchPackageNames": ["lscr.io/linuxserver/**"],
       "groupName": "media stack",
+      "pinDigests": true
+    },
+    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["itzg/minecraft-server", "itzg/mc-backup"],
+      "groupName": "minecraft",
       "pinDigests": true
     },
     {
