@@ -20,6 +20,12 @@
       "pinDigests": true
     },
     {
+      "description": "Keep MySQL on the 8.4 LTS release line",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["mysql"],
+      "allowedVersions": "/^8\\.4(?:\\.|$)/"
+    },
+    {
       "matchManagers": ["kustomize"],
       "matchDepTypes": ["HelmChart"],
       "groupName": "cluster helm charts"
