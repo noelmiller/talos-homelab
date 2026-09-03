@@ -20,9 +20,10 @@
       "pinDigests": true
     },
     {
-      "description": "Keep MySQL on the 8.4 LTS release line",
+      "description": "Keep Ombi's MySQL database on the 8.4 LTS release line",
       "matchDatasources": ["docker"],
       "matchPackageNames": ["mysql"],
+      "matchFileNames": ["03-media/ombi-mysql.yaml"],
       "allowedVersions": "/^8\\.4(?:\\.|$)/"
     },
     {
