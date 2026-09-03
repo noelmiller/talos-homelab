@@ -21,6 +21,7 @@ local-storage-patch.yaml         Talos UserVolumeConfig patch for the 3 data dis
 04-gitops/                        ArgoCD app-of-apps definitions
 05-dashboard/                     Homepage cluster dashboard
 06-virtualization/                KubeVirt, CDI, Multus, and kubevirt-manager
+07-minecraft/                     Paper Minecraft server with Bedrock cross-play
 ```
 
 ## Prerequisites
@@ -181,6 +182,21 @@ git add -A && git commit -m "..." && git push
 ```
 
 ArgoCD polls the repo and auto-syncs + self-heals drift. Force an immediate sync with `argocd app sync <name>` or the UI at `https://argocd.<your-domain>`.
+
+## 7. Minecraft
+
+The `minecraft` namespace runs a Paper server with Geyser and Floodgate, allowing both Java and Bedrock clients to connect. The world is stored on a 50Gi `nvme-2tb` PVC, and a sidecar creates coordinated backups every 12 hours on a separate 50Gi `sata-1tb` PVC. The most recent 14 backups are retained.
+
+MetalLB assigns `10.42.0.12` to the Minecraft Service:
+
+| Client | Port |
+|---|---|
+| Java Edition | `25565/TCP` |
+| Bedrock Edition | `19132/UDP` |
+
+The server initially allows all authenticated players. Before exposing it publicly, add player names with the `WHITELIST` environment variable in `07-minecraft/server.yaml` and change `ENABLE_WHITELIST` to `"TRUE"`.
+
+For public access, forward both ports from the router to `10.42.0.12` and create a DNS-only Cloudflare record pointing at the router's public IP. Cloudflare Tunnel cannot proxy the Bedrock UDP port.
 
 ## Networking notes
 
