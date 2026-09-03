@@ -185,18 +185,18 @@ ArgoCD polls the repo and auto-syncs + self-heals drift. Force an immediate sync
 
 ## 7. Minecraft
 
-The `minecraft` namespace runs a Paper server with Geyser and Floodgate, allowing both Java and Bedrock clients to connect. The world is stored on a 50Gi `nvme-2tb` PVC, and a sidecar creates coordinated backups every 12 hours on a separate 50Gi `sata-1tb` PVC. The most recent 14 backups are retained.
+The `minecraft` namespace runs separate survival and creative Paper servers with Geyser and Floodgate, allowing both Java and Bedrock clients to connect. Each world uses `nvme-2tb` storage, and a sidecar creates coordinated backups every 12 hours on a separate `sata-1tb` PVC. The most recent 14 backups per server are retained.
 
-MetalLB assigns `10.42.0.12` to the Minecraft Service:
+MetalLB exposes the servers on dedicated LAN addresses:
 
-| Client | Port |
-|---|---|
-| Java Edition | `25565/TCP` |
-| Bedrock Edition | `19132/UDP` |
+| Server | Address | Java Edition | Bedrock Edition |
+|---|---|---|---|
+| Survival | `10.42.0.12` | `25565/TCP` | `19132/UDP` |
+| Creative | `10.42.0.13` | `25566/TCP` | `19133/UDP` |
 
 The server initially allows all authenticated players. Before exposing it publicly, add player names with the `WHITELIST` environment variable in `07-minecraft/server.yaml` and change `ENABLE_WHITELIST` to `"TRUE"`.
 
-For public access, forward both ports from the router to `10.42.0.12` and create a DNS-only Cloudflare record pointing at the router's public IP. Cloudflare Tunnel cannot proxy the Bedrock UDP port.
+For public access, forward each server's ports from the router and create DNS-only Cloudflare records pointing at the router's public IP. Cloudflare Tunnel cannot proxy the Bedrock UDP ports.
 
 ## Networking notes
 
