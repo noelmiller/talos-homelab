@@ -14,7 +14,7 @@ helmCharts:
     repo: https://helm.traefik.io/traefik
     releaseName: traefik
     namespace: traefik
-    version: 41.2.0
+    version: 41.4.0
     valuesInline:
       providers:
         kubernetesCRD:
@@ -58,7 +58,7 @@ helmCharts:
     repo: https://bitnami.github.io/sealed-secrets
     releaseName: sealed-secrets
     namespace: kube-system
-    version: 2.16.1
+    version: 2.19.3
     includeCRDs: true
 
   - name: cert-manager
@@ -75,7 +75,7 @@ helmCharts:
     repo: https://argoproj.github.io/argo-helm
     releaseName: argocd
     namespace: argocd
-    version: 10.5.0
+    version: 10.7.0
     includeCRDs: true
     valuesInline:
       global:
