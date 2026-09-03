@@ -25,6 +25,10 @@
         icon: sabnzbd.png
 
 - Cluster:
+    - Grafana:
+        href: https://grafana.k8s.noelmiller.dev
+        description: Metrics and service health
+        icon: grafana.png
     - ArgoCD:
         href: https://argocd.k8s.noelmiller.dev
         description: GitOps deployment dashboard

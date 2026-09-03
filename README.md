@@ -22,6 +22,7 @@ local-storage-patch.yaml         Talos UserVolumeConfig patch for the 3 data dis
 05-dashboard/                     Homepage cluster dashboard
 06-virtualization/                KubeVirt, CDI, Multus, and kubevirt-manager
 07-minecraft/                     Paper Minecraft server with Bedrock cross-play
+08-monitoring/                    Prometheus, Grafana, exporters, probes, and alerts
 ```
 
 ## Prerequisites
@@ -173,7 +174,7 @@ Once ArgoCD is running (from step 3), bootstrap the app-of-apps pattern **once**
 kubectl apply -f 04-gitops/root-app.yaml
 ```
 
-This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, and `virtualization`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
+This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, `virtualization`, `minecraft`, and `monitoring`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
 
 From here on, the workflow is just:
 
@@ -197,6 +198,14 @@ MetalLB exposes the servers on dedicated LAN addresses:
 The server initially allows all authenticated players. Before exposing it publicly, add player names with the `WHITELIST` environment variable in `07-minecraft/server.yaml` and change `ENABLE_WHITELIST` to `"TRUE"`.
 
 For public access, forward each server's ports from the router and create DNS-only Cloudflare records pointing at the router's public IP. Cloudflare Tunnel cannot proxy the Bedrock UDP ports.
+
+## 8. Monitoring
+
+The `monitoring` namespace runs the `kube-prometheus-stack` and Prometheus Blackbox Exporter. Prometheus retains up to 15 days or 25 GB of metrics on a 30 GiB `sata-1tb` PVC. It collects Kubernetes API, kubelet/cAdvisor, node-exporter, and kube-state-metrics data, providing cluster, node, namespace, pod, container, and persistent-volume telemetry. Native metrics from ArgoCD, Traefik, cert-manager, sealed-secrets, and all metrics-capable components installed by the stack are discovered through PodMonitor and ServiceMonitor resources.
+
+Blackbox probes cover every application-facing HTTP or TCP service in this repository, including the media stack, Homepage, ArgoCD, KubeVirt Manager, the test VM, MySQL, both Minecraft servers, Grafana, and the Kubernetes API. The `ApplicationServiceUnavailable` alert fires after a probe has failed for five minutes, while `ApplicationServiceSlow` detects HTTP endpoints taking longer than five seconds.
+
+Grafana is available at `https://grafana.k8s.noelmiller.dev`. It is configured for anonymous Viewer access on the trusted LAN with administrative login disabled. The built-in Kubernetes dashboards are supplemented by **Cluster Service Overview**, which shows service health and latency, node utilization, namespace resource usage, and PVC utilization.
 
 ## Networking notes
 
