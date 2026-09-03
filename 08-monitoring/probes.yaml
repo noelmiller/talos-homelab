@@ -1,0 +1,52 @@
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: application-http
+  namespace: monitoring
+spec:
+  jobName: application-http
+  interval: 30s
+  scrapeTimeout: 15s
+  module: http_2xx
+  prober:
+    url: blackbox-exporter.monitoring.svc.cluster.local:9115
+    path: /probe
+  targets:
+    staticConfig:
+      labels:
+        service_type: http
+      static:
+        - http://jellyfin.media.svc.cluster.local:8096/
+        - http://ombi.media.svc.cluster.local:3579/
+        - http://prowlarr.media.svc.cluster.local:9696/
+        - http://radarr.media.svc.cluster.local:7878/
+        - http://sabnzbd.media.svc.cluster.local:8080/
+        - http://sonarr.media.svc.cluster.local:8989/
+        - https://dashboard.k8s.noelmiller.dev/
+        - http://argocd-server.argocd.svc.cluster.local/
+        - http://kubevirt-manager.kubevirt-manager.svc.cluster.local:8080/
+        - http://web-test.default.svc.cluster.local:8080/
+        - http://monitoring-grafana.monitoring.svc.cluster.local/
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: application-tcp
+  namespace: monitoring
+spec:
+  jobName: application-tcp
+  interval: 30s
+  scrapeTimeout: 15s
+  module: tcp_connect
+  prober:
+    url: blackbox-exporter.monitoring.svc.cluster.local:9115
+    path: /probe
+  targets:
+    staticConfig:
+      labels:
+        service_type: tcp
+      static:
+        - ombi-mysql.media.svc.cluster.local:3306
+        - minecraft.minecraft.svc.cluster.local:25565
+        - minecraft-creative.minecraft.svc.cluster.local:25566
+        - kubernetes.default.svc.cluster.local:443

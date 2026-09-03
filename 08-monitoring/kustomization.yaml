@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - grafana-route.yaml
+  - native-metrics.yaml
+  - probes.yaml
+  - probe-alerts.yaml
+  - service-overview-dashboard.yaml
+
+helmCharts:
+  - name: kube-prometheus-stack
+    repo: https://prometheus-community.github.io/helm-charts
+    releaseName: monitoring
+    namespace: monitoring
+    version: 88.6.3
+    includeCRDs: true
+    valuesFile: kube-prometheus-stack-values.yaml
+  - name: prometheus-blackbox-exporter
+    repo: https://prometheus-community.github.io/helm-charts
+    releaseName: blackbox
+    namespace: monitoring
+    version: 11.18.0
+    valuesFile: blackbox-exporter-values.yaml
