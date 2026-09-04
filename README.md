@@ -1,6 +1,6 @@
 # Talos Homelab — Single-Node Kubernetes Cluster
 
-A single-node [Talos Linux](https://www.talos.dev/) Kubernetes cluster running on bare metal, managed declaratively via `kustomize` and [ArgoCD](https://argo-cd.readthedocs.io/). Hosts a Traefik ingress gateway with automatic Let's Encrypt certs, and a GPU-accelerated media stack (Jellyfin, Ombi, Sonarr, Radarr, Prowlarr, SABnzbd).
+A single-node [Talos Linux](https://www.talos.dev/) Kubernetes cluster running on bare metal, managed declaratively via `kustomize` and [ArgoCD](https://argo-cd.readthedocs.io/). Hosts a Traefik ingress gateway with automatic Let's Encrypt certs, a GPU-accelerated media stack (Jellyfin, Ombi, Sonarr, Radarr, Prowlarr, SABnzbd), and game servers.
 
 ## Hardware
 
@@ -21,6 +21,7 @@ local-storage-patch.yaml         Talos UserVolumeConfig patch for the 3 data dis
 04-gitops/                        ArgoCD app-of-apps definitions
 05-dashboard/                     Homepage cluster dashboard
 06-virtualization/                KubeVirt, CDI, Multus, and kubevirt-manager
+07-palworld/                      Palworld dedicated server and persistent storage
 ```
 
 ## Prerequisites
@@ -172,7 +173,7 @@ Once ArgoCD is running (from step 3), bootstrap the app-of-apps pattern **once**
 kubectl apply -f 04-gitops/root-app.yaml
 ```
 
-This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, and `virtualization`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
+This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, `virtualization`, and `palworld`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
 
 From here on, the workflow is just:
 
@@ -200,6 +201,12 @@ ArgoCD polls the repo and auto-syncs + self-heals drift. Force an immediate sync
     --mode try --timeout 5m --file controlplane-kubevirt.yaml
   ```
   Verify `br0`, node health, and Kubernetes access before the timeout. Talos automatically rolls the change back if connectivity is lost. The node's original bare-metal network configuration may also exist in META key `0x0a`; back it up with `talosctl get meta 0x0a -o yaml`, then remove it with `talosctl meta delete 0x0a` to prevent the node IP from being assigned to both `enp6s0` and `br0`. Once only `br0` owns the address and the cluster is healthy, persist the full generated config with `apply-config --mode auto`.
+
+## 7. Palworld server (`07-palworld`)
+
+The Palworld dedicated server is available on the LAN at `10.42.0.14:8211` over UDP. MetalLB assigns the stable LAN address, while the server world, game installation, and built-in daily backups persist on a 50 GiB `nvme-2tb` PVC. The server and administrator passwords are stored in a namespace-scoped `SealedSecret`.
+
+The server is intentionally not exposed through the router or Cloudflare. A future public deployment should relay the game and query UDP ports through a VPS rather than publishing the home IP.
 
 ## Security notes
 

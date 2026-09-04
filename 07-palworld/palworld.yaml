@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: palworld
+  namespace: palworld
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: palworld
+  template:
+    metadata:
+      labels:
+        app: palworld
+    spec:
+      terminationGracePeriodSeconds: 120
+      securityContext:
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: palworld
+          image: docker.io/thijsvanloef/palworld-server-docker:v2.7.3@sha256:be3ad49e373045a7b60478fd8b7f7411c1e293713dfa4733e563e798f276d688
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: palworld
+            - secretRef:
+                name: palworld
+          ports:
+            - name: game
+              containerPort: 8211
+              protocol: UDP
+            - name: query
+              containerPort: 27015
+              protocol: UDP
+          resources:
+            requests:
+              cpu: "4"
+              memory: 8Gi
+            limits:
+              cpu: "12"
+              memory: 24Gi
+          startupProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pgrep PalServer-Linux >/dev/null
+            failureThreshold: 120
+            periodSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pgrep PalServer-Linux >/dev/null
+            failureThreshold: 3
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pgrep PalServer-Linux >/dev/null
+            failureThreshold: 3
+            periodSeconds: 20
+          volumeMounts:
+            - name: data
+              mountPath: /palworld
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: palworld-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: palworld
+  namespace: palworld
+  annotations:
+    metallb.io/loadBalancerIPs: 10.42.0.14
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    app: palworld
+  ports:
+    - name: game
+      port: 8211
+      targetPort: game
+      protocol: UDP
+    - name: query
+      port: 27015
+      targetPort: query
+      protocol: UDP
