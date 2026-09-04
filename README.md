@@ -1,6 +1,6 @@
 # Talos Homelab — Single-Node Kubernetes Cluster
 
-A single-node [Talos Linux](https://www.talos.dev/) Kubernetes cluster running on bare metal, managed declaratively via `kustomize` and [ArgoCD](https://argo-cd.readthedocs.io/). Hosts a Traefik ingress gateway with automatic Let's Encrypt certs, and a GPU-accelerated media stack (Jellyfin, Ombi, Sonarr, Radarr, Prowlarr, SABnzbd).
+A single-node [Talos Linux](https://www.talos.dev/) Kubernetes cluster running on bare metal, managed declaratively via `kustomize` and [ArgoCD](https://argo-cd.readthedocs.io/). Hosts a Traefik ingress gateway with automatic Let's Encrypt certs, a GPU-accelerated media stack (Jellyfin, Ombi, Sonarr, Radarr, Prowlarr, SABnzbd), and game servers.
 
 ## Hardware
 
@@ -23,6 +23,7 @@ local-storage-patch.yaml         Talos UserVolumeConfig patch for the 3 data dis
 06-virtualization/                KubeVirt, CDI, Multus, and kubevirt-manager
 07-minecraft/                     Paper Minecraft server with Bedrock cross-play
 08-monitoring/                    Prometheus, Grafana, exporters, probes, and alerts
+09-palworld/                      Palworld dedicated server and persistent storage
 ```
 
 ## Prerequisites
@@ -174,7 +175,7 @@ Once ArgoCD is running (from step 3), bootstrap the app-of-apps pattern **once**
 kubectl apply -f 04-gitops/root-app.yaml
 ```
 
-This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, `virtualization`, `minecraft`, and `monitoring`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
+This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, `virtualization`, `minecraft`, `monitoring`, and `palworld`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
 
 From here on, the workflow is just:
 
@@ -203,9 +204,15 @@ For public access, forward each server's ports from the router and create DNS-on
 
 The `monitoring` namespace runs the `kube-prometheus-stack` and Prometheus Blackbox Exporter. Prometheus retains up to 15 days or 25 GB of metrics on a 30 GiB `sata-1tb` PVC. It collects Kubernetes API, kubelet/cAdvisor, node-exporter, and kube-state-metrics data, providing cluster, node, namespace, pod, container, and persistent-volume telemetry. Native metrics from ArgoCD, Traefik, cert-manager, sealed-secrets, and all metrics-capable components installed by the stack are discovered through PodMonitor and ServiceMonitor resources.
 
-Blackbox probes cover every application-facing HTTP or TCP service in this repository, including the media stack, Homepage, ArgoCD, KubeVirt Manager, the test VM, MySQL, both Minecraft servers, Grafana, and the Kubernetes API. The `ApplicationServiceUnavailable` alert fires after a probe has failed for five minutes, while `ApplicationServiceSlow` detects HTTP endpoints taking longer than five seconds.
+Blackbox probes cover every application-facing HTTP or TCP service in this repository, including the media stack, Homepage, ArgoCD, KubeVirt Manager, the test VM, MySQL, both Minecraft servers, Palworld's cluster-internal REST endpoint, Grafana, and the Kubernetes API. The `ApplicationServiceUnavailable` alert fires after a probe has failed for five minutes, while `ApplicationServiceSlow` detects HTTP endpoints taking longer than five seconds.
 
 Grafana is available at `https://grafana.k8s.noelmiller.dev`. It is configured for anonymous Viewer access on the trusted LAN with administrative login disabled. The built-in Kubernetes dashboards are supplemented by **Cluster Service Overview**, which shows service health and latency, node utilization, namespace resource usage, and PVC utilization.
+
+## 9. Palworld server
+
+The Palworld dedicated server is available on the LAN at `10.42.0.14:8211` over UDP. MetalLB assigns the stable LAN address, while the server world, game installation, and built-in daily backups persist on a 50 GiB `nvme-2tb` PVC. The server and administrator passwords are stored in a namespace-scoped `SealedSecret`.
+
+The server is intentionally not exposed through the router or Cloudflare. A future public deployment should relay the game and query UDP ports through a VPS rather than publishing the home IP.
 
 ## Networking notes
 
