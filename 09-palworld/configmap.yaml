@@ -17,7 +17,8 @@ data:
   SERVER_DESCRIPTION: Private Palworld server
   UPDATE_ON_BOOT: "true"
   RCON_ENABLED: "false"
-  REST_API_ENABLED: "false"
+  REST_API_ENABLED: "true"
+  REST_API_PORT: "8212"
   BACKUP_ENABLED: "true"
   BACKUP_CRON_EXPRESSION: 0 5 * * *
   DELETE_OLD_BACKUPS: "true"

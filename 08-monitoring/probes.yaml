@@ -49,4 +49,5 @@ spec:
         - ombi-mysql.media.svc.cluster.local:3306
         - minecraft.minecraft.svc.cluster.local:25565
         - minecraft-creative.minecraft.svc.cluster.local:25566
+        - palworld-monitoring.palworld.svc.cluster.local:8212
         - kubernetes.default.svc.cluster.local:443
