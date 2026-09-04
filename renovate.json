@@ -4,7 +4,7 @@
   "timezone": "America/Chicago",
   "schedule": ["every weekend"],
   "kubernetes": {
-    "managerFilePatterns": ["/^03-media/.+\\.yaml$/", "/^05-dashboard/.+\\.yaml$/"]
+    "managerFilePatterns": ["/^03-media/.+\\.yaml$/", "/^05-dashboard/.+\\.yaml$/", "/^07-minecraft/.+\\.yaml$/"]
   },
   "packageRules": [
     {
@@ -12,6 +12,19 @@
       "matchPackageNames": ["lscr.io/linuxserver/**"],
       "groupName": "media stack",
       "pinDigests": true
+    },
+    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["itzg/minecraft-server", "itzg/mc-backup"],
+      "groupName": "minecraft",
+      "pinDigests": true
+    },
+    {
+      "description": "Keep Ombi's MySQL database on the 8.4 LTS release line",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["mysql"],
+      "matchFileNames": ["03-media/ombi-mysql.yaml"],
+      "allowedVersions": "/^8\\.4(?:\\.|$)/"
     },
     {
       "matchManagers": ["kustomize"],

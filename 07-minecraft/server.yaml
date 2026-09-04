@@ -1,0 +1,153 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minecraft
+  namespace: minecraft
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: minecraft
+  template:
+    metadata:
+      labels:
+        app: minecraft
+    spec:
+      terminationGracePeriodSeconds: 120
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: minecraft
+          image: itzg/minecraft-server:2026.8.2-java25@sha256:efa878ddb49cf5251b2e5f2ad71b08fd2f7236c1f7907433f6697258b31d2ce4
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: EULA
+              value: "TRUE"
+            - name: TYPE
+              value: PAPER
+            - name: VERSION
+              value: "26.2"
+            - name: MEMORY
+              value: 6G
+            - name: TZ
+              value: America/Chicago
+            - name: MOTD
+              value: Noel's Minecraft Server
+            - name: DIFFICULTY
+              value: normal
+            - name: MODE
+              value: survival
+            - name: MAX_PLAYERS
+              value: "10"
+            - name: VIEW_DISTANCE
+              value: "10"
+            - name: SIMULATION_DISTANCE
+              value: "8"
+            - name: ONLINE_MODE
+              value: "TRUE"
+            - name: ENABLE_WHITELIST
+              value: "FALSE"
+            - name: ENFORCE_WHITELIST
+              value: "TRUE"
+            - name: ENABLE_RCON
+              value: "TRUE"
+            - name: RCON_PASSWORD_FILE
+              value: /run/secrets/rcon/password
+            - name: PLUGINS
+              value: |
+                https://download.geysermc.org/v2/projects/geyser/versions/2.11.2/builds/1234/downloads/spigot
+                https://download.geysermc.org/v2/projects/floodgate/versions/2.2.5/builds/140/downloads/spigot
+          ports:
+            - name: java
+              containerPort: 25565
+              protocol: TCP
+            - name: bedrock
+              containerPort: 19132
+              protocol: UDP
+          startupProbe:
+            tcpSocket:
+              port: java
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket:
+              port: java
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: java
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "2"
+              memory: 6Gi
+            limits:
+              memory: 8Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: rcon
+              mountPath: /run/secrets/rcon
+              readOnly: true
+        - name: backup
+          image: itzg/mc-backup:2026.9.0@sha256:89ee1d9d1ee47891123147ac191d0522acc4cde727422681f6b8abf044a3badd
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: TZ
+              value: America/Chicago
+            - name: BACKUP_NAME
+              value: minecraft
+            - name: INITIAL_DELAY
+              value: 10m
+            - name: BACKUP_INTERVAL
+              value: 12h
+            - name: PRUNE_BACKUPS_COUNT
+              value: "14"
+            - name: RCON_HOST
+              value: localhost
+            - name: RCON_PASSWORD_FILE
+              value: /run/secrets/rcon/password
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+              readOnly: true
+            - name: backups
+              mountPath: /backups
+            - name: rcon
+              mountPath: /run/secrets/rcon
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: minecraft-data
+        - name: backups
+          persistentVolumeClaim:
+            claimName: minecraft-backups
+        - name: rcon
+          secret:
+            secretName: minecraft-rcon
+            defaultMode: 0440
