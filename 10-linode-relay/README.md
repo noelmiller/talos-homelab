@@ -1,16 +1,16 @@
 # Linode game relay
 
 This Terraform stack creates a `$5/month` Nanode in Linode's Chicago region
-with a deny-by-default Cloud Firewall. The VM is prepared for WireGuard and
-IPv4 forwarding but does not configure the WireGuard peer or packet-forwarding
-rules, which must be paired with pfSense.
+with a deny-by-default Cloud Firewall. The VM enables IPv4 forwarding,
+installs Tailscale, and configures nftables to forward public game traffic to
+the pfSense Tailscale subnet router.
 
 ## Permitted inbound ports
 
 | Port | Protocol | Purpose |
 |---:|:---:|---|
 | 22 | TCP | SSH, restricted to `admin_cidr` |
-| 51820 | UDP | WireGuard |
+| 41641 | UDP | Tailscale direct connections |
 | 25565 | TCP | Minecraft survival Java |
 | 19132 | UDP | Minecraft survival Bedrock |
 | 25566 | TCP | Minecraft creative Java |
@@ -56,12 +56,19 @@ the VM from accidental destruction. To intentionally remove it, temporarily
 set `prevent_destroy = false`, apply that change, and then run
 `terraform destroy`.
 
-## Next step
+## Tailscale
 
-After deployment, configure `wg0` on the VM and pfSense, enable
-`wg-quick@wg0`, and add nftables DNAT rules:
+Configure the pfSense Tailscale package to advertise `10.42.0.0/24`, approve
+that route in the Tailscale admin console, and then authorize the relay:
 
-| Public port | WireGuard destination |
+```bash
+ssh root@$(terraform output -raw relay_public_ip)
+tailscale up --accept-routes --hostname=game-relay --ssh=false
+```
+
+The relay's nftables rules forward these public ports through Tailscale:
+
+| Public port | Tailscale-routed destination |
 |---:|---|
 | `25565/TCP` | `10.42.0.12:25565` |
 | `19132/UDP` | `10.42.0.12:19132` |
@@ -69,6 +76,14 @@ After deployment, configure `wg0` on the VM and pfSense, enable
 | `19133/UDP` | `10.42.0.13:19133` |
 | `8211/UDP` | `10.42.0.14:8211` |
 | `27015/UDP` | `10.42.0.14:27015` |
+
+Keep the relay node and pfSense route approval active in the Tailscale admin
+console. Tailscale authentication is intentionally not stored in Terraform or
+cloud-init.
+
+Palworld advertises `172.233.217.64:8211` in the community browser. Both
+`8211/UDP` and `27015/UDP` must remain reachable through the relay for gameplay
+and server discovery.
 
 Point DNS-only game records at the `relay_public_ip` output after forwarding
 works. The public IPv4 remains stable for the life of the Linode.

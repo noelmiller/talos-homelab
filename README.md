@@ -199,7 +199,14 @@ MetalLB exposes the servers on dedicated LAN addresses:
 
 Both servers enforce an explicit player whitelist. Keep `WHITELIST` in `server.yaml` and `creative.yaml` limited to known Java or Floodgate player names.
 
-For public access, the Linode relay forwards game traffic through WireGuard to pfSense instead of exposing the home address. The LoadBalancer Services accept game traffic only from the LAN and the relay's `10.99.0.1` tunnel address. Create DNS-only Cloudflare records pointing at the relay IP; Cloudflare Tunnel cannot proxy the Bedrock UDP ports.
+For public access, the Linode relay forwards game traffic through Tailscale to
+the pfSense subnet router instead of exposing the home address. The
+LoadBalancer Services accept traffic only from the LAN; pfSense SNATs relayed
+traffic to its LAN address. Create DNS-only Cloudflare records pointing at the
+relay IP; Cloudflare Tunnel cannot proxy the Bedrock UDP ports.
+
+Palworld publishes itself in the community browser with the Linode address
+`172.233.217.64:8211`. The server password remains required for players.
 
 ## 8. Monitoring
 
