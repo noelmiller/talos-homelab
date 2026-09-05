@@ -81,5 +81,9 @@ Keep the relay node and pfSense route approval active in the Tailscale admin
 console. Tailscale authentication is intentionally not stored in Terraform or
 cloud-init.
 
+Palworld advertises `172.233.217.64:8211` in the community browser. Both
+`8211/UDP` and `27015/UDP` must remain reachable through the relay for gameplay
+and server discovery.
+
 Point DNS-only game records at the `relay_public_ip` output after forwarding
 works. The public IPv4 remains stable for the life of the Linode.

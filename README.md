@@ -205,6 +205,9 @@ LoadBalancer Services accept traffic only from the LAN; pfSense SNATs relayed
 traffic to its LAN address. Create DNS-only Cloudflare records pointing at the
 relay IP; Cloudflare Tunnel cannot proxy the Bedrock UDP ports.
 
+Palworld publishes itself in the community browser with the Linode address
+`172.233.217.64:8211`. The server password remains required for players.
+
 ## 8. Monitoring
 
 The `monitoring` namespace runs the `kube-prometheus-stack` and Prometheus Blackbox Exporter. Prometheus retains up to 15 days or 25 GB of metrics on a 30 GiB `sata-1tb` PVC. It collects Kubernetes API, kubelet/cAdvisor, node-exporter, and kube-state-metrics data, providing cluster, node, namespace, pod, container, and persistent-volume telemetry. Native metrics from ArgoCD, Traefik, cert-manager, sealed-secrets, and all metrics-capable components installed by the stack are discovered through PodMonitor and ServiceMonitor resources.

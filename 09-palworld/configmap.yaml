@@ -12,7 +12,9 @@ data:
   PGID: "1000"
   ENABLE_PERF_THREADING_ARGS: "true"
   WORKER_THREADS_SERVER: "4"
-  COMMUNITY: "false"
+  COMMUNITY: "true"
+  PUBLIC_IP: 172.233.217.64
+  PUBLIC_PORT: "8211"
   SERVER_NAME: Noel's Palworld Server
   SERVER_DESCRIPTION: Private Palworld server
   LOG_LEVEL: INFO
