@@ -69,7 +69,7 @@ spec:
             - name: ENFORCE_WHITELIST
               value: "TRUE"
             - name: WHITELIST
-              value: "dogphilosopher,.dogphilosopher"
+              value: dogphilosopher
             - name: ENABLE_RCON
               value: "TRUE"
             - name: RCON_PASSWORD_FILE
@@ -78,6 +78,16 @@ spec:
               value: |
                 https://download.geysermc.org/v2/projects/geyser/versions/2.11.2/builds/1234/downloads/spigot
                 https://download.geysermc.org/v2/projects/floodgate/versions/2.2.5/builds/140/downloads/spigot
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - sh
+                  - -c
+                  - |
+                    until rcon-cli "fwhitelist add dogphilosopher"; do
+                      sleep 5
+                    done
           ports:
             - name: java
               containerPort: 25565
