@@ -3,8 +3,9 @@ hostname: ${hostname}
 package_update: true
 package_upgrade: true
 packages:
+  - ca-certificates
+  - curl
   - nftables
-  - wireguard
 
 write_files:
   - path: /etc/sysctl.d/99-game-relay.conf
@@ -12,7 +13,24 @@ write_files:
     content: |
       net.ipv4.ip_forward=1
       net.ipv4.conf.all.src_valid_mark=1
+  - path: /etc/nftables.conf
+    permissions: "0644"
+    content: |
+      ${indent(6, nftables_config)}
+  - path: /etc/systemd/system/tailscaled.service.d/nftables.conf
+    permissions: "0644"
+    content: |
+      [Unit]
+      Requires=nftables.service
+      After=nftables.service
 
 runcmd:
   - [sysctl, --system]
-  - [systemctl, enable, nftables]
+  - [curl, -fsSL, "https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg", -o, /usr/share/keyrings/tailscale-archive-keyring.gpg]
+  - [curl, -fsSL, "https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list", -o, /etc/apt/sources.list.d/tailscale.list]
+  - [apt-get, update]
+  - [apt-get, install, -y, tailscale]
+  - [systemctl, daemon-reload]
+  - [systemctl, enable, --now, nftables]
+  - [systemctl, enable, tailscaled]
+  - [systemctl, restart, tailscaled]

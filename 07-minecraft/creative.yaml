@@ -173,7 +173,6 @@ spec:
   externalTrafficPolicy: Local
   loadBalancerSourceRanges:
     - 10.42.0.0/24
-    - 10.99.0.1/32
   selector:
     app: minecraft-creative
   ports:

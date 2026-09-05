@@ -18,10 +18,10 @@ locals {
   }
 
   udp_ingress = {
-    wireguard = {
-      description = "WireGuard tunnel from pfSense"
+    tailscale = {
+      description = "Tailscale direct connection"
       source      = "0.0.0.0/0"
-      ports       = "51820"
+      ports       = "41641"
     }
     minecraft-survival-bedrock = {
       description = "Minecraft survival Bedrock"
@@ -57,12 +57,14 @@ resource "linode_instance" "relay" {
 
   metadata {
     user_data = base64encode(templatefile("${path.module}/cloud-init.yaml.tftpl", {
-      hostname = "game-relay"
+      hostname        = "game-relay"
+      nftables_config = file("${path.module}/nftables.conf")
     }))
   }
 
   lifecycle {
     prevent_destroy = true
+    ignore_changes  = [metadata[0].user_data]
   }
 }
 
