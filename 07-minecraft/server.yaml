@@ -15,6 +15,7 @@ spec:
       labels:
         app: minecraft
     spec:
+      automountServiceAccountToken: false
       terminationGracePeriodSeconds: 120
       securityContext:
         runAsNonRoot: true
@@ -58,9 +59,11 @@ spec:
             - name: ONLINE_MODE
               value: "TRUE"
             - name: ENABLE_WHITELIST
-              value: "FALSE"
+              value: "TRUE"
             - name: ENFORCE_WHITELIST
               value: "TRUE"
+            - name: WHITELIST
+              value: dogphilosopher
             - name: ENABLE_RCON
               value: "TRUE"
             - name: RCON_PASSWORD_FILE

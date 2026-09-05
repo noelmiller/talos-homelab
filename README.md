@@ -24,6 +24,7 @@ local-storage-patch.yaml         Talos UserVolumeConfig patch for the 3 data dis
 07-minecraft/                     Paper Minecraft server with Bedrock cross-play
 08-monitoring/                    Prometheus, Grafana, exporters, probes, and alerts
 09-palworld/                      Palworld dedicated server and persistent storage
+10-linode-relay/                  Terraform for the public WireGuard game relay
 ```
 
 ## Prerequisites
@@ -196,9 +197,9 @@ MetalLB exposes the servers on dedicated LAN addresses:
 | Survival | `10.42.0.12` | `25565/TCP` | `19132/UDP` |
 | Creative | `10.42.0.13` | `25566/TCP` | `19133/UDP` |
 
-The server initially allows all authenticated players. Before exposing it publicly, add player names with the `WHITELIST` environment variable in `07-minecraft/server.yaml` and change `ENABLE_WHITELIST` to `"TRUE"`.
+Both servers enforce an explicit player whitelist. Keep `WHITELIST` in `server.yaml` and `creative.yaml` limited to known Java or Floodgate player names.
 
-For public access, forward each server's ports from the router and create DNS-only Cloudflare records pointing at the router's public IP. Cloudflare Tunnel cannot proxy the Bedrock UDP ports.
+For public access, the Linode relay forwards game traffic through WireGuard to pfSense instead of exposing the home address. The LoadBalancer Services accept game traffic only from the LAN and the relay's `10.99.0.1` tunnel address. Create DNS-only Cloudflare records pointing at the relay IP; Cloudflare Tunnel cannot proxy the Bedrock UDP ports.
 
 ## 8. Monitoring
 
@@ -212,7 +213,7 @@ Grafana is available at `https://grafana.k8s.noelmiller.dev`. It is configured f
 
 The Palworld dedicated server is available on the LAN at `10.42.0.14:8211` over UDP. MetalLB assigns the stable LAN address, while the server world, game installation, and built-in daily backups persist on a 50 GiB `nvme-2tb` PVC. The server and administrator passwords are stored in a namespace-scoped `SealedSecret`.
 
-The server is intentionally not exposed through the router or Cloudflare. A future public deployment should relay the game and query UDP ports through a VPS rather than publishing the home IP.
+The server is not exposed directly through the router or Cloudflare. The Linode relay is intended to forward the game and query UDP ports over WireGuard without publishing the home IP. Community-browser listing remains disabled until that tunnel and forwarding path are complete.
 
 ## Networking notes
 
