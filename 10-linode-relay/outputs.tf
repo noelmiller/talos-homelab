@@ -4,7 +4,7 @@ output "instance_id" {
 }
 
 output "relay_public_ip" {
-  description = "Public IPv4 address used for game DNS and the pfSense WireGuard peer."
+  description = "Public IPv4 address used for game DNS and Palworld publication."
   value       = tolist(linode_instance.relay.ipv4)[0]
 }
 
