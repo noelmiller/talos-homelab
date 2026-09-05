@@ -15,6 +15,7 @@ data:
   COMMUNITY: "false"
   SERVER_NAME: Noel's Palworld Server
   SERVER_DESCRIPTION: Private Palworld server
+  LOG_LEVEL: INFO
   UPDATE_ON_BOOT: "true"
   RCON_ENABLED: "false"
   REST_API_ENABLED: "true"

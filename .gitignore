@@ -3,3 +3,12 @@ talosconfig
 controlplane.yaml
 worker.yaml
 cloudflare-secret.yaml
+
+# Terraform local state and credentials
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfvars
+!**/*.tfvars.example
+**/crash.log
+**/tfplan
