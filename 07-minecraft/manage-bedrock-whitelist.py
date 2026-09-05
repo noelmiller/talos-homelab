@@ -9,13 +9,14 @@ import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
+from typing import Dict, List, Optional
 
 
 WHITELIST_PATH = Path(__file__).with_name("bedrock-whitelist.json")
 XUID_API = "https://api.geysermc.org/v2/xbox/xuid/"
 
 
-def load_whitelist() -> list[dict[str, str]]:
+def load_whitelist() -> List[Dict[str, str]]:
     try:
         entries = json.loads(WHITELIST_PATH.read_text())
     except (OSError, json.JSONDecodeError) as error:
@@ -36,7 +37,7 @@ def load_whitelist() -> list[dict[str, str]]:
     return entries
 
 
-def save_whitelist(entries: list[dict[str, str]]) -> None:
+def save_whitelist(entries: List[Dict[str, str]]) -> None:
     entries.sort(key=lambda entry: entry["name"].casefold())
     temporary_path = WHITELIST_PATH.with_suffix(".json.tmp")
     temporary_path.write_text(json.dumps(entries, indent=2) + "\n")
@@ -79,7 +80,7 @@ def floodgate_name(gamertag: str) -> str:
     return "." + gamertag.replace(" ", "_")
 
 
-def add_player(gamertag: str, supplied_xuid: str | None) -> None:
+def add_player(gamertag: str, supplied_xuid: Optional[str]) -> None:
     xuid = validate_xuid(supplied_xuid) if supplied_xuid else resolve_xuid(gamertag)
     player_uuid = floodgate_uuid(xuid)
     player_name = floodgate_name(gamertag)
@@ -144,6 +145,9 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     commands.add_parser("list", help="List Bedrock players and Floodgate UUIDs")
+    if sys.argv[1:] == ["help"]:
+        parser.print_help()
+        parser.exit()
     return parser.parse_args()
 
 
