@@ -82,6 +82,8 @@ spec:
               value: |
                 https://download.geysermc.org/v2/projects/geyser/versions/2.11.2/builds/1234/downloads/spigot
                 https://download.geysermc.org/v2/projects/floodgate/versions/2.2.5/builds/140/downloads/spigot
+            - name: MODRINTH_PROJECTS
+              value: paper:distant-horizons-support:0.14.0
           ports:
             - name: java
               containerPort: 25565
