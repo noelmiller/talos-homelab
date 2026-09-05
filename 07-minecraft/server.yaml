@@ -63,7 +63,7 @@ spec:
             - name: ENFORCE_WHITELIST
               value: "TRUE"
             - name: WHITELIST
-              value: dogphilosopher
+              value: "dogphilosopher,.dogphilosopher"
             - name: ENABLE_RCON
               value: "TRUE"
             - name: RCON_PASSWORD_FILE
