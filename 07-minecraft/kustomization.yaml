@@ -1,5 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+namespace: minecraft
 
 resources:
   - namespace.yaml
@@ -9,3 +10,8 @@ resources:
   - server.yaml
   - creative.yaml
   - service.yaml
+
+configMapGenerator:
+  - name: minecraft-bedrock-whitelist
+    files:
+      - bedrock-whitelist.json
