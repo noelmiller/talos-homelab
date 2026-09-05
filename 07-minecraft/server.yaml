@@ -79,7 +79,7 @@ spec:
                   - sh
                   - -c
                   - |
-                    until rcon-cli "fwhitelist add dogphilosopher"; do
+                    until rcon-cli "fwhitelist add Xmas132584"; do
                       sleep 5
                     done
           ports:
