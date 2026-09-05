@@ -199,6 +199,21 @@ MetalLB exposes the servers on dedicated LAN addresses:
 
 Both servers enforce an explicit player whitelist. Keep `WHITELIST` in `server.yaml` and `creative.yaml` limited to known Java or Floodgate player names.
 
+Java players are managed with the `WHITELIST` environment variable. Bedrock
+players are managed once for both servers through
+`07-minecraft/bedrock-whitelist.json`:
+
+```bash
+07-minecraft/manage-bedrock-whitelist.py list
+07-minecraft/manage-bedrock-whitelist.py add "XboxGamertag"
+07-minecraft/manage-bedrock-whitelist.py remove "XboxGamertag"
+```
+
+The script resolves the Xbox XUID and writes the deterministic Floodgate UUID.
+Use `--xuid DECIMAL_XUID` with `add` when the public lookup is unavailable.
+Commit the changed JSON file so ArgoCD rolls both servers with the new
+whitelist.
+
 For public access, the Linode relay forwards game traffic through Tailscale to
 the pfSense subnet router instead of exposing the home address. The
 LoadBalancer Services accept traffic only from the LAN; pfSense SNATs relayed

@@ -70,6 +70,10 @@ spec:
               value: "TRUE"
             - name: WHITELIST
               value: dogphilosopher
+            - name: WHITELIST_FILE
+              value: /config/bedrock-whitelist.json
+            - name: EXISTING_WHITELIST_FILE
+              value: SYNC_FILE_MERGE_LIST
             - name: ENABLE_RCON
               value: "TRUE"
             - name: RCON_PASSWORD_FILE
@@ -78,16 +82,6 @@ spec:
               value: |
                 https://download.geysermc.org/v2/projects/geyser/versions/2.11.2/builds/1234/downloads/spigot
                 https://download.geysermc.org/v2/projects/floodgate/versions/2.2.5/builds/140/downloads/spigot
-          lifecycle:
-            postStart:
-              exec:
-                command:
-                  - sh
-                  - -c
-                  - |
-                    until rcon-cli "fwhitelist add Xmas132584"; do
-                      sleep 5
-                    done
           ports:
             - name: java
               containerPort: 25565
@@ -120,6 +114,10 @@ spec:
               mountPath: /data
             - name: rcon
               mountPath: /run/secrets/rcon
+              readOnly: true
+            - name: bedrock-whitelist
+              mountPath: /config/bedrock-whitelist.json
+              subPath: bedrock-whitelist.json
               readOnly: true
         - name: backup
           image: itzg/mc-backup:2026.9.0@sha256:89ee1d9d1ee47891123147ac191d0522acc4cde727422681f6b8abf044a3badd
@@ -170,6 +168,9 @@ spec:
           secret:
             secretName: minecraft-creative-rcon
             defaultMode: 0440
+        - name: bedrock-whitelist
+          configMap:
+            name: minecraft-bedrock-whitelist
 ---
 apiVersion: v1
 kind: Service
