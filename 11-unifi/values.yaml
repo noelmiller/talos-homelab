@@ -43,3 +43,20 @@ persistence:
     enabled: true
     storageClass: sata-1tb
     size: 20Gi
+
+# Prometheus exporter (unpoller) for real UniFi metrics: clients, AP/switch
+# health, PoE, throughput. Auth uses a dedicated local-only admin account
+# (Settings -> Admins & Users -> Add Admin -> Local Access Only). The
+# password is stored in a SealedSecret (see
+# 11-unifi/sealed-unifi-exporter-secret.yaml) rather than plaintext here.
+unifiExporter:
+  enabled: true
+  config:
+    verifyTLS: false
+    saveSites: true
+    username: unpoller
+  existingSecret:
+    name: unifi-exporter-creds
+    passwordKey: password
+  serviceMonitor:
+    enabled: true

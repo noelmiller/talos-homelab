@@ -8,6 +8,7 @@ resources:
   - probes.yaml
   - probe-alerts.yaml
   - service-overview-dashboard.yaml
+  - unifi-dashboard.yaml
 
 helmCharts:
   - name: kube-prometheus-stack
