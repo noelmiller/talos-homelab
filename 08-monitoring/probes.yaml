@@ -50,4 +50,6 @@ spec:
         - minecraft.minecraft.svc.cluster.local:25565
         - minecraft-creative.minecraft.svc.cluster.local:25566
         - palworld-monitoring.palworld.svc.cluster.local:8212
+        - unifi-unifi-os-server-webui.unifi.svc.cluster.local:443
+        - unifi-unifi-os-server-communication.unifi.svc.cluster.local:8080
         - kubernetes.default.svc.cluster.local:443

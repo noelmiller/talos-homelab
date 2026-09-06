@@ -25,6 +25,7 @@ local-storage-patch.yaml         Talos UserVolumeConfig patch for the 3 data dis
 08-monitoring/                    Prometheus, Grafana, exporters, probes, and alerts
 09-palworld/                      Palworld dedicated server and persistent storage
 10-linode-relay/                  Terraform for the public WireGuard game relay
+11-unifi/                         UniFi OS Server network appliance
 ```
 
 ## Prerequisites
@@ -176,7 +177,7 @@ Once ArgoCD is running (from step 3), bootstrap the app-of-apps pattern **once**
 kubectl apply -f 04-gitops/root-app.yaml
 ```
 
-This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, `virtualization`, `minecraft`, `monitoring`, and `palworld`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
+This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, `virtualization`, `minecraft`, `monitoring`, `palworld`, and `unifi`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
 
 From here on, the workflow is just:
 
@@ -236,6 +237,30 @@ Grafana is available at `https://grafana.k8s.noelmiller.dev`. It is configured f
 The Palworld dedicated server is available on the LAN at `10.42.0.14:8211` over UDP. MetalLB assigns the stable LAN address, while the server world, game installation, and built-in daily backups persist on a 50 GiB `nvme-2tb` PVC. The server and administrator passwords are stored in a namespace-scoped `SealedSecret`.
 
 The server is not exposed directly through the router or Cloudflare. The Linode relay is intended to forward the game and query UDP ports over WireGuard without publishing the home IP. Community-browser listing remains disabled until that tunnel and forwarding path are complete.
+
+## 10. UniFi network appliance
+
+The UniFi OS Server appliance runs in the `unifi` namespace from the
+`chrissnell/unifi-os-kubernetes` Helm chart. MetalLB exposes all required
+appliance ports on the LAN-only address `10.42.0.15`:
+
+| Purpose | Address |
+|---|---|
+| Web UI / API | `https://10.42.0.15` |
+| Device inform | `http://10.42.0.15:8080/inform` |
+| STUN | `10.42.0.15:3478/UDP` |
+| Discovery | `10.42.0.15:10003/UDP` |
+
+Persistent state is split across PVCs: main UniFi OS data and autobackups on
+`sata-1tb`, and the bundled MongoDB data directory on `nvme-2tb`.
+
+To restore devices from a legacy controller, first restore the `.unf` backup in
+the UniFi Network UI. If devices do not reconnect automatically, SSH to each
+device and set its inform URL:
+
+```bash
+set-inform http://10.42.0.15:8080/inform
+```
 
 ## Networking notes
 
