@@ -25,6 +25,10 @@
         icon: sabnzbd.png
 
 - Cluster:
+    - UniFi:
+        href: https://10.42.0.15
+        description: Network controller appliance
+        icon: unifi.png
     - Grafana:
         href: https://grafana.k8s.noelmiller.dev
         description: Metrics and service health

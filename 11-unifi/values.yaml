@@ -1,0 +1,46 @@
+systemIp: 10.42.0.15
+
+extraEnv:
+  TZ: America/Chicago
+
+service:
+  type: LoadBalancer
+  loadBalancerIP: 10.42.0.15
+  externalTrafficPolicy: Local
+  annotations:
+    metallb.io/allow-shared-ip: unifi-os-server
+    metallb.io/loadBalancerIPs: 10.42.0.15
+
+ports:
+  webui:
+    enabled: true
+    port: 443
+    targetPort: 443
+    protocol: TCP
+  communication:
+    enabled: true
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  stun:
+    enabled: true
+    port: 3478
+    targetPort: 3478
+    protocol: UDP
+  discovery:
+    enabled: true
+    port: 10003
+    targetPort: 10003
+    protocol: UDP
+
+persistence:
+  data:
+    storageClass: sata-1tb
+    size: 30Gi
+  mongo:
+    storageClass: nvme-2tb
+    size: 10Gi
+  backups:
+    enabled: true
+    storageClass: sata-1tb
+    size: 20Gi

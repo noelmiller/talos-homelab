@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+
+helmCharts:
+  - name: unifi-os-server
+    repo: https://chrissnell.github.io/unifi-os-kubernetes
+    releaseName: unifi
+    namespace: unifi
+    version: 0.2.9
+    valuesFile: values.yaml
+
+patches:
+  - target:
+      kind: Service
+      labelSelector: app.kubernetes.io/instance=unifi
+    patch: |-
+      - op: add
+        path: /spec/loadBalancerSourceRanges
+        value:
+          - 10.42.0.0/24
