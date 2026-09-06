@@ -5,6 +5,7 @@ resources:
   - namespace.yaml
   - certificate.yaml
   - web-route.yaml
+  - sealed-unifi-exporter-secret.yaml
 
 helmCharts:
   - name: unifi-os-server
@@ -17,7 +18,8 @@ helmCharts:
 patches:
   - target:
       kind: Service
-      labelSelector: app.kubernetes.io/instance=unifi
+      labelSelector: app.kubernetes.io/instance=unifi,app.kubernetes.io/component!=unifi-exporter
+      name: unifi-unifi-os-server-(communication|discovery|stun|webui)
     patch: |-
       - op: add
         path: /spec/loadBalancerSourceRanges
