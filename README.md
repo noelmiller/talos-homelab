@@ -246,10 +246,14 @@ appliance ports on the LAN-only address `10.42.0.15`:
 
 | Purpose | Address |
 |---|---|
-| Web UI / API | `https://10.42.0.15` |
+| Web UI / API | `https://unifi.k8s.noelmiller.dev` |
 | Device inform | `http://10.42.0.15:8080/inform` |
 | STUN | `10.42.0.15:3478/UDP` |
 | Discovery | `10.42.0.15:10003/UDP` |
+
+The appliance's own HTTPS listener on `10.42.0.15` uses a self-signed
+certificate. Use the Traefik-routed hostname above for the browser UI; keep the
+LAN IP for device-facing ports.
 
 Persistent state is split across PVCs: main UniFi OS data and autobackups on
 `sata-1tb`, and the bundled MongoDB data directory on `nvme-2tb`.

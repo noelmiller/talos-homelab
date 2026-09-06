@@ -26,7 +26,7 @@
 
 - Cluster:
     - UniFi:
-        href: https://10.42.0.15
+        href: https://unifi.k8s.noelmiller.dev
         description: Network controller appliance
         icon: unifi.png
     - Grafana:
