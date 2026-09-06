@@ -5,7 +5,6 @@ extraEnv:
 
 service:
   type: LoadBalancer
-  loadBalancerIP: 10.42.0.15
   externalTrafficPolicy: Local
   annotations:
     metallb.io/allow-shared-ip: unifi-os-server
