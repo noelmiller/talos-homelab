@@ -15,10 +15,11 @@ helmCharts:
     releaseName: traefik
     namespace: traefik
     version: 41.4.0
+    includeCRDs: true
     valuesInline:
       providers:
         kubernetesCRD:
-          enabled: false
+          enabled: true
         kubernetesIngress:
           enabled: false
         kubernetesGateway:
@@ -127,4 +128,3 @@ patches:
           pod-security.kubernetes.io/enforce: privileged
           pod-security.kubernetes.io/audit: privileged
           pod-security.kubernetes.io/warn: privileged
-
