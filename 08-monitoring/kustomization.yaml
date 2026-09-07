@@ -15,7 +15,7 @@ helmCharts:
     repo: https://prometheus-community.github.io/helm-charts
     releaseName: monitoring
     namespace: monitoring
-    version: 89.2.2
+    version: 90.0.0
     includeCRDs: true
     valuesFile: kube-prometheus-stack-values.yaml
   - name: prometheus-blackbox-exporter
