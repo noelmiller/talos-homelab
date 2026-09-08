@@ -5,6 +5,7 @@ resources:
   - https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.37/deploy/local-path-storage.yaml
   - https://raw.githubusercontent.com/metallb/metallb/v0.16.1/config/manifests/metallb-native.yaml
   - https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.1/standard-install.yaml
+  - https://raw.githubusercontent.com/alex1989hu/kubelet-serving-cert-approver/main/deploy/standalone-install.yaml
   - traefik-namespace.yaml
   - cert-manager-namespace.yaml
   - argocd-namespace.yaml
@@ -60,11 +61,6 @@ helmCharts:
     releaseName: metrics-server
     namespace: kube-system
     version: 3.14.0
-    valuesInline:
-      args:
-        # Talos kubelets present certificates that aren't signed for the
-        # kubelet's Pod/Node IPs, so metrics-server can't verify them.
-        - --kubelet-insecure-tls
 
   - name: sealed-secrets
     repo: https://bitnami.github.io/sealed-secrets
