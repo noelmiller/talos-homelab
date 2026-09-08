@@ -15,6 +15,7 @@ A single-node [Talos Linux](https://www.talos.dev/) Kubernetes cluster running o
 controlplane.yaml, worker.yaml   Talos machine configs (gitignored — contain cluster PKI secrets)
 talosconfig                      talosctl client config (gitignored — contains admin credentials)
 local-storage-patch.yaml         Talos UserVolumeConfig patch for the 3 data disks
+metrics-server-kubelet-patch.yaml Talos KubeletConfig patch enabling serving-cert rotation for metrics-server
 01-infrastructure/                Helm-chart-based cluster bootstrap (see below)
 02-configuration/                 Cluster-wide config: storage classes, Gateway, MetalLB pool, ClusterIssuer
 03-media/                         Media app stack (Jellyfin/Ombi/Sonarr/Radarr/Prowlarr/SABnzbd)
@@ -91,7 +92,17 @@ This layer installs, via a mix of raw upstream manifests and Helm charts declare
 - **Traefik** — ingress gateway via the Kubernetes Gateway API provider, with automatic Let's Encrypt via Cloudflare DNS-01
 - **sealed-secrets** — encrypts secrets so they're safe to commit to a public git repo
 - **cert-manager** — issues the wildcard TLS cert used by the Gateway
+- **kubelet-serving-cert-approver** — auto-approves kubelet serving-certificate CSRs so kubelets get certs signed by the cluster CA instead of self-signed ones
+- **metrics-server** — powers `kubectl top nodes`/`kubectl top pods`; verifies kubelet certs rather than skipping validation, which requires the machine config patch below
 - **ArgoCD** — once installed, manages every layer (including itself) going forward
+
+metrics-server needs kubelet certificate rotation enabled first, or its pod will report kubelets as unreachable. Apply [metrics-server-kubelet-patch.yaml](metrics-server-kubelet-patch.yaml) to the node (one-time, persists across reboots):
+
+```bash
+talosctl --talosconfig talosconfig -n <node> patch mc -p @metrics-server-kubelet-patch.yaml
+```
+
+This enables `rotate-server-certificates`, prompting the kubelet to request a CSR that `kubelet-serving-cert-approver` then auto-approves.
 
 Apply it (first time only — after this, ArgoCD takes over):
 
