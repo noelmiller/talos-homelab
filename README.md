@@ -102,7 +102,7 @@ metrics-server needs kubelet certificate rotation enabled first, or its pod will
 talosctl --talosconfig talosconfig -n <node> patch mc -p @metrics-server-kubelet-patch.yaml
 ```
 
-This enables `rotate-server-certificates`, prompting the kubelet to request a CSR that `kubelet-serving-cert-approver` then auto-approves.
+This enables kubelet serving-certificate rotation (`serverTLSBootstrap`), prompting the kubelet to request a CSR that `kubelet-serving-cert-approver` then auto-approves. Uses the legacy `machine.kubelet.extraConfig` field rather than the newer `KubeletConfig` document, since this cluster's config already sets `machine.kubelet` elsewhere (see `talos-kubevirt-network-patch.yaml`) and Talos doesn't allow both to coexist.
 
 Apply it (first time only — after this, ArgoCD takes over):
 
