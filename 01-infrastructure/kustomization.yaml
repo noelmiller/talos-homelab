@@ -55,6 +55,17 @@ helmCharts:
         - secretRef:
             name: cloudflare-api-token
   
+  - name: metrics-server
+    repo: https://kubernetes-sigs.github.io/metrics-server/
+    releaseName: metrics-server
+    namespace: kube-system
+    version: 3.14.0
+    valuesInline:
+      args:
+        # Talos kubelets present certificates that aren't signed for the
+        # kubelet's Pod/Node IPs, so metrics-server can't verify them.
+        - --kubelet-insecure-tls
+
   - name: sealed-secrets
     repo: https://bitnami.github.io/sealed-secrets
     releaseName: sealed-secrets
