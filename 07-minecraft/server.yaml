@@ -58,6 +58,8 @@ spec:
               value: "8"
             - name: ONLINE_MODE
               value: "TRUE"
+            - name: ENFORCE_SECURE_PROFILE
+              value: "FALSE"
             - name: ENABLE_WHITELIST
               value: "TRUE"
             - name: ENFORCE_WHITELIST
