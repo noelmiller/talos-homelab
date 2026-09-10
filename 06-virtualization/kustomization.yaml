@@ -14,7 +14,7 @@ resources:
 
 images:
   - name: ghcr.io/k8snetworkplumbingwg/multus-cni
-    newTag: v4.3.0-thick
+    newTag: v4.3.1-thick
 
 patches:
   - patch: |-
