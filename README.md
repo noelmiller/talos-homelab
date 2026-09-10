@@ -172,6 +172,10 @@ A one-shot [bootstrap Job](03-media/bootstrap-job.yaml) wires the apps together 
 kubectl delete job media-bootstrap -n media --ignore-not-found
 ```
 
+### Jellyfin 12 upgrade
+
+The deployment is pinned to Jellyfin 12.0. Before syncing this change, make a restorable backup of the `jellyfin-config` PVC and disable or remove third-party plugins. Jellyfin 12 performs a one-time database migration; do not roll back the image or interrupt the pod after it starts until the migration completes. Afterward, run a full library scan and verify hardware transcoding.
+
 Manual, one-time setup still required per app (can't be scripted without your own accounts/credentials):
 - SABnzbd: add your usenet provider (Settings → Servers)
 - Prowlarr: add your indexer(s) — syncs to Sonarr/Radarr automatically
