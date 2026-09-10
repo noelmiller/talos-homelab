@@ -124,7 +124,7 @@ spec:
               subPath: bedrock-whitelist.json
               readOnly: true
         - name: backup
-          image: itzg/mc-backup:2026.9.0@sha256:89ee1d9d1ee47891123147ac191d0522acc4cde727422681f6b8abf044a3badd
+          image: itzg/mc-backup:2026.9.1@sha256:0b6a10703723e8b2c03cf19e237aaebef91deeeafceb376968a659b32c11b66f
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
