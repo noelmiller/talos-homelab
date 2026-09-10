@@ -15,7 +15,7 @@ helmCharts:
     repo: https://helm.traefik.io/traefik
     releaseName: traefik
     namespace: traefik
-    version: 41.4.0
+    version: 41.5.0
     includeCRDs: true
     valuesInline:
       providers:
@@ -83,7 +83,7 @@ helmCharts:
     repo: https://argoproj.github.io/argo-helm
     releaseName: argocd
     namespace: argocd
-    version: 10.8.1
+    version: 10.8.4
     includeCRDs: true
     valuesInline:
       global:
