@@ -66,14 +66,14 @@ helmCharts:
     repo: https://bitnami.github.io/sealed-secrets
     releaseName: sealed-secrets
     namespace: kube-system
-    version: 2.19.3
+    version: 2.20.0
     includeCRDs: true
 
   - name: cert-manager
     repo: https://charts.jetstack.io
     releaseName: cert-manager
     namespace: cert-manager
-    version: v1.21.1
+    version: v1.21.2
     includeCRDs: true
     valuesInline:
       crds:
@@ -83,7 +83,7 @@ helmCharts:
     repo: https://argoproj.github.io/argo-helm
     releaseName: argocd
     namespace: argocd
-    version: 10.8.4
+    version: 10.9.0
     includeCRDs: true
     valuesInline:
       global:
