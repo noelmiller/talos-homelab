@@ -1,0 +1,13 @@
+auth:
+  username: coder
+  database: coder
+  existingSecret: coder-postgresql
+  secretKeys:
+    adminPasswordKey: postgres-password
+    userPasswordKey: password
+
+primary:
+  persistence:
+    enabled: true
+    storageClass: nvme-2tb
+    size: 20Gi

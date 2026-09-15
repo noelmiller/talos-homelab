@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: coder-github-oauth
+  namespace: coder
+spec:
+  encryptedData:
+    client-secret: AgB7spXRyHgUIgBi7DWQ18PLQOQoXOLmRt/it6/eMfLsKKQ6kaCHnIaVrLcJEq0XJnZ1IwYHIWBXh93f/Awx9H8VWm4y7Nxkp/1qfm4dgve32esJe/39Tnvsh3m0wnSyT+AWcjZhmqSb12pH7rJ8tgmpdbHooTLE62q/DFtI5CjfV0mXaj+u4UYXWToZiNSNmGfm/vhW3Jf2V1FxBnHCujaNcpZosMS1OMyx80/HvZziPt/LhdTZpv4WuEqRkufrI3h+CV5tYF3ba/lWve3Hk8hsJrZK/J3PowqGUOw3gEmzFGQkySFSb4Lpqi5bgFlIiukPrs01mftwlXdc9ySYnAVoqhn9Msl89Q4DSrJPfTYRXNTgXpMwLsAd8j9rncUO7AQjcNbuVIKLclitAArNbbUf/X4ARKYuESHctHvtkV9/4JNW0+pEfykeuM1ZiPzk/4+WXhjI1JxMrxq0WeHm2j2d1c8A4A1wPl6EXWOYba70eDHv4sBK0hFHYSL+Pj28sbdXVBcaKdE+0pQSUSLo49KZi1ip+soWkSqL9fP7Ad5LaGTUkXtkRGXn9FNSOKDnrrSCWvMrQBFLE/hfh2P+K9rkqNfjewB/iTcL+HzEkNxxr19c9ujHzAxRGi+W3A8B1Qt3YuSssKryC6LAeIpgnD5FgZdm/es4HZsoyGSXVTSg2BGMVTHH/I+hoyui+NhbirmTgjYw9sFoZ/+EPIMinzMMwhCGtwQ6cjJ0kMK/KHjDKxwKRARKdUAi
+  template:
+    metadata:
+      name: coder-github-oauth
+      namespace: coder

@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - sealed-coder-postgresql.yaml
+  - sealed-coder-github-oauth.yaml
+  - coder-route.yaml
+
+helmCharts:
+  - name: postgresql
+    repo: https://charts.bitnami.com/bitnami
+    releaseName: coder-postgresql
+    namespace: coder
+    version: 18.11.3
+    valuesFile: postgresql-values.yaml
+  - name: coder
+    repo: https://helm.coder.com/v2
+    releaseName: coder
+    namespace: coder
+    version: 2.37.1
+    valuesFile: coder-values.yaml

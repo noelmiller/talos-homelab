@@ -1,0 +1,24 @@
+coder:
+  env:
+    - name: CODER_PG_CONNECTION_URL
+      valueFrom:
+        secretKeyRef:
+          name: coder-postgresql
+          key: connection-url
+    - name: CODER_ACCESS_URL
+      value: https://coder.k8s.noelmiller.dev
+    - name: CODER_OAUTH2_GITHUB_DEFAULT_PROVIDER_ENABLE
+      value: "false"
+    - name: CODER_OAUTH2_GITHUB_ALLOW_SIGNUPS
+      value: "true"
+    - name: CODER_OAUTH2_GITHUB_CLIENT_ID
+      value: "Ov23li6vhWfO9NVP5Btc"
+    - name: CODER_OAUTH2_GITHUB_CLIENT_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: coder-github-oauth
+          key: client-secret
+    - name: CODER_OAUTH2_GITHUB_ALLOWED_ORGS
+      value: "henry-miller-frazier"
+  service:
+    type: ClusterIP
