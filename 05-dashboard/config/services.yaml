@@ -40,3 +40,7 @@
     - KubeVirt Manager:
         href: https://kubevirt.k8s.noelmiller.dev
         description: Virtual machine management
+    - Coder:
+        href: https://coder.k8s.noelmiller.dev
+        description: Remote development environments
+        icon: coder.png
