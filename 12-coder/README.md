@@ -7,7 +7,7 @@ exposes it at `https://coder.k8s.noelmiller.dev`.
 - `namespace.yaml`: creates the `coder` namespace.
 - `sealed-coder-postgresql.yaml`: sealed credentials for the PostgreSQL instance (`password`, `postgres-password`, `connection-url`).
 - `sealed-coder-github-oauth.yaml`: sealed GitHub OAuth App client secret (`client-secret`).
-- `postgresql-values.yaml`: Bitnami PostgreSQL chart values (20Gi persistent volume on `nvme-2tb`).
+- `postgresql-values.yaml`: Bitnami PostgreSQL chart values (20Gi persistent volume on `nvme-2tb`). The image is pinned by digest because the chart's default tag is the floating `latest`, which would pull a new PostgreSQL major on any pod restart and fail to start on the existing data directory.
 - `coder-values.yaml`: Coder Helm chart values configured for cluster-internal PostgreSQL, GitHub OAuth, and `https://coder.k8s.noelmiller.dev` access URL.
 - `coder-route.yaml`: Gateway API `HTTPRoute` attaching `coder.k8s.noelmiller.dev` to `main-gateway`.
 
@@ -53,3 +53,14 @@ kubectl create secret generic coder-github-oauth \
     --controller-namespace kube-system \
     > 12-coder/sealed-coder-github-oauth.yaml
 ```
+
+## Upgrading PostgreSQL
+The pinned digest corresponds to PostgreSQL 18.6.0. To move to a newer image, look up the
+current `latest` digest and its version label, then update `image.digest` in
+`postgresql-values.yaml`. Stay within the same major version unless you have a
+`pg_dump` backup and are prepared to run a major-version upgrade.
+
+```sh
+curl -s https://hub.docker.com/v2/repositories/bitnami/postgresql/tags/latest | jq -r .digest
+```
+

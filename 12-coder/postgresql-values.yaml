@@ -1,3 +1,10 @@
+image:
+  # Chart 18.x defaults to the floating `latest` tag, which would silently pull
+  # a new PostgreSQL major on any pod restart and refuse to start on the old
+  # data directory. Pin the digest that was current when Coder was deployed
+  # (PostgreSQL 18.6.0, pushed 2026-09-14). Bump deliberately, with a backup.
+  digest: sha256:b69d1fca390fb131639e86e820f248acfc5d911339dc884796f8009260c598d7
+
 auth:
   username: coder
   database: coder

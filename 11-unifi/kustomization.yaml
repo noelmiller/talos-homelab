@@ -25,3 +25,14 @@ patches:
         path: /spec/loadBalancerSourceRanges
         value:
           - 10.42.0.0/24
+  # Never let an Argo CD prune or a cascading Application delete remove a PVC.
+  # Data lives on local disks and is not reproducible from git.
+  - target:
+      kind: PersistentVolumeClaim
+    patch: |-
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: not-used
+        annotations:
+          argocd.argoproj.io/sync-options: Prune=false,Delete=false

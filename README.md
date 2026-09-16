@@ -27,6 +27,7 @@ metrics-server-kubelet-patch.yaml Talos KubeletConfig patch enabling serving-cer
 09-palworld/                      Palworld dedicated server and persistent storage
 10-linode-relay/                  Terraform for the public WireGuard game relay
 11-unifi/                         UniFi OS Server network appliance
+12-coder/                         Coder remote development environments with PostgreSQL
 ```
 
 ## Prerequisites
@@ -154,7 +155,7 @@ Verify with `talosctl ls /dev/dri` (expect `card0` + `renderD128`) and `vainfo` 
 
 ## 4. Cluster-wide configuration (`02-configuration`)
 
-- `storage-classes.yaml` — `nvme-2tb`, `sata-8tb`, `sata-1tb` StorageClasses (`WaitForFirstConsumer`, backed by local-path-provisioner)
+- `storage-classes.yaml` — `nvme-2tb`, `sata-8tb`, `sata-1tb` StorageClasses (`WaitForFirstConsumer`, `reclaimPolicy: Retain`, backed by local-path-provisioner). `Retain` means deleting a PVC leaves the PV `Released` and the data on disk; clean up deliberately with `kubectl delete pv <name>` and then remove the directory under `/var/mnt/<class>/`. `reclaimPolicy` is immutable, so the classes carry `Replace=true` and ArgoCD recreates them on change; existing PVs are unaffected.
 - `metallb-pool.yaml` — `IPAddressPool` + `L2Advertisement` for the LAN
 - `main-gateway.yaml` — the shared `Gateway` (HTTP + HTTPS listeners on `*.<your-domain>`); listener ports must match Traefik's actual EntryPoint ports (`8000`/`8443`), not the externally-exposed Service ports (`80`/`443`)
 - `cluster-issuer.yaml` — cert-manager `ClusterIssuer` (ACME + Cloudflare DNS-01) and a wildcard `Certificate`
@@ -166,11 +167,7 @@ Every app's `HTTPRoute` attaches to `main-gateway`'s `websecure` listener and in
 
 Jellyfin, Ombi, SABnzbd, Sonarr, Radarr, and Prowlarr. The download and library apps share one bulk `sata-8tb` PVC mounted at `/data` (same filesystem, so completed downloads move instead of copy into the library). Jellyfin additionally mounts `/dev/dri` (`securityContext.privileged: true` — required, hostPath alone doesn't bypass Kubernetes' device cgroup) for VAAPI hardware transcoding. Ombi uses a dedicated MySQL 8.4 database on NVMe storage and communicates with the other apps over their cluster Services.
 
-A one-shot [bootstrap Job](03-media/bootstrap-job.yaml) wires the apps together after first deploy (SABnzbd categories/paths, Sonarr/Radarr download client + root folder, Prowlarr → Sonarr/Radarr application sync) by reading each app's auto-generated API key from its config PVC. It's idempotent but **Jobs are immutable** — if you change `03-media/bootstrap-script.sh`, you must delete the old Job before ArgoCD/kubectl can recreate it:
-
-```bash
-kubectl delete job media-bootstrap -n media --ignore-not-found
-```
+A [bootstrap Job](03-media/bootstrap-job.yaml) wires the apps together (SABnzbd categories/paths, Sonarr/Radarr download client + root folder, Prowlarr → Sonarr/Radarr application sync) by reading each app's auto-generated API key from its config PVC. It runs as an ArgoCD **PostSync hook**, so it executes after every successful sync of the `media` Application and is idempotent. The `BeforeHookCreation` delete policy removes the previous Job before creating a new one, so changing `03-media/bootstrap-script.sh` needs no manual cleanup. It is deliberately *not* a tracked resource with a TTL: ArgoCD's self-heal would recreate a garbage-collected Job indefinitely.
 
 ### Jellyfin 12 upgrade
 
@@ -192,7 +189,7 @@ Once ArgoCD is running (from step 3), bootstrap the app-of-apps pattern **once**
 kubectl apply -f 04-gitops/root-app.yaml
 ```
 
-This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, `virtualization`, `minecraft`, `monitoring`, `palworld`, and `unifi`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
+This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, `virtualization`, `minecraft`, `monitoring`, `palworld`, `unifi`, and `coder`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
 
 From here on, the workflow is just:
 
@@ -244,6 +241,25 @@ Palworld publishes itself in the community browser with the Linode address
 The `monitoring` namespace runs the `kube-prometheus-stack` and Prometheus Blackbox Exporter. Prometheus retains up to 15 days or 25 GB of metrics on a 30 GiB `sata-1tb` PVC. It collects Kubernetes API, kubelet/cAdvisor, node-exporter, and kube-state-metrics data, providing cluster, node, namespace, pod, container, and persistent-volume telemetry. Native metrics from ArgoCD, Traefik, cert-manager, sealed-secrets, and all metrics-capable components installed by the stack are discovered through PodMonitor and ServiceMonitor resources.
 
 Blackbox probes cover every application-facing HTTP or TCP service in this repository, including the media stack, Homepage, ArgoCD, KubeVirt Manager, the test VM, MySQL, both Minecraft servers, Palworld's cluster-internal REST endpoint, Grafana, and the Kubernetes API. The `ApplicationServiceUnavailable` alert fires after a probe has failed for five minutes, while `ApplicationServiceSlow` detects HTTP endpoints taking longer than five seconds.
+
+Alerts are delivered to a Discord channel. Alertmanager reads the webhook URL from the `alertmanager-discord` Secret, committed as a `SealedSecret`. To create or rotate it, make a webhook in Discord (channel settings → Integrations → Webhooks), then seal it without leaving the URL in shell history:
+
+```bash
+read -rsp "Discord webhook URL: " DISCORD_WEBHOOK; echo
+kubectl create secret generic alertmanager-discord -n monitoring \
+  --from-literal=webhook-url="$DISCORD_WEBHOOK" --dry-run=client -o yaml | \
+  kubeseal --controller-name sealed-secrets --controller-namespace kube-system --format yaml \
+  > 08-monitoring/sealed-alertmanager-discord.yaml
+unset DISCORD_WEBHOOK
+```
+
+The `monitoring` kustomization references this file, so the layer does not build (and ArgoCD makes no changes) until it exists. `Watchdog` and `InfoInhibitor` are routed to a null receiver; everything else, including resolved notifications, goes to Discord. Test delivery by port-forwarding Alertmanager and posting a synthetic alert:
+
+```bash
+kubectl -n monitoring port-forward svc/monitoring-kube-prometheus-alertmanager 9093 &
+curl -XPOST localhost:9093/api/v2/alerts -H 'Content-Type: application/json' \
+  -d '[{"labels":{"alertname":"DiscordTest","severity":"warning"},"annotations":{"summary":"Alertmanager to Discord test"}}]'
+```
 
 Grafana is available at `https://grafana.k8s.noelmiller.dev`. It is configured for anonymous Viewer access on the trusted LAN with administrative login disabled. The built-in Kubernetes dashboards are supplemented by **Cluster Service Overview**, which shows service health and latency, node utilization, namespace resource usage, and PVC utilization.
 
@@ -299,6 +315,17 @@ set-inform http://10.42.0.15:8080/inform
     --mode try --timeout 5m --file controlplane-kubevirt.yaml
   ```
   Verify `br0`, node health, and Kubernetes access before the timeout. Talos automatically rolls the change back if connectivity is lost. The node's original bare-metal network configuration may also exist in META key `0x0a`; back it up with `talosctl get meta 0x0a -o yaml`, then remove it with `talosctl meta delete 0x0a` to prevent the node IP from being assigned to both `enp6s0` and `br0`. Once only `br0` owns the address and the cluster is healthy, persist the full generated config with `apply-config --mode auto`.
+
+## Data-safety notes
+
+- Every StorageClass uses `reclaimPolicy: Retain`, and every PVC that ArgoCD tracks carries `argocd.argoproj.io/sync-options: Prune=false,Delete=false` (applied by a kustomize patch in each layer). Removing a PVC from git, or deleting an Application with the resources finalizer, therefore leaves the PVC and its data in place.
+- Changing a StorageClass's reclaim policy does **not** update PVs that were provisioned before the change. After the `Retain` change syncs, patch the existing PVs once:
+  ```bash
+  kubectl get pv -o name | xargs -n1 kubectl patch -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+  kubectl get pv -o custom-columns='PV:.metadata.name,CLAIM:.spec.claimRef.name,RECLAIM:.spec.persistentVolumeReclaimPolicy'
+  ```
+- PVCs created by operators or StatefulSet `volumeClaimTemplates` (Prometheus, Alertmanager, Coder's PostgreSQL) are not ArgoCD-tracked and are never pruned, but are still only protected on disk by the PV reclaim policy above.
+- This is a single node with no off-node backups yet. Minecraft and Palworld backups live on the same machine as the data they protect.
 
 ## Security notes
 

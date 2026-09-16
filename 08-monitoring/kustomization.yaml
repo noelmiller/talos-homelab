@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - namespace.yaml
+  - sealed-alertmanager-discord.yaml
   - grafana-route.yaml
   - native-metrics.yaml
   - probes.yaml
@@ -24,3 +25,16 @@ helmCharts:
     namespace: monitoring
     version: 11.18.0
     valuesFile: blackbox-exporter-values.yaml
+
+patches:
+  # Never let an Argo CD prune or a cascading Application delete remove a PVC.
+  # Data lives on local disks and is not reproducible from git.
+  - target:
+      kind: PersistentVolumeClaim
+    patch: |-
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: not-used
+        annotations:
+          argocd.argoproj.io/sync-options: Prune=false,Delete=false
