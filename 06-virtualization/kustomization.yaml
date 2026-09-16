@@ -53,3 +53,31 @@ patches:
           pod-security.kubernetes.io/enforce: privileged
           pod-security.kubernetes.io/audit: privileged
           pod-security.kubernetes.io/warn: privileged
+  # kubevirt-manager already runs as uid 10000 with a read-only root fs; the
+  # upstream bundle just omits the remaining fields the restricted profile needs.
+  - patch: |-
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: kubevirt-manager
+        labels:
+          pod-security.kubernetes.io/enforce: restricted
+          pod-security.kubernetes.io/audit: restricted
+          pod-security.kubernetes.io/warn: restricted
+  - target:
+      kind: Deployment
+      name: kubevirt-manager
+      namespace: kubevirt-manager
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext/runAsNonRoot
+        value: true
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext/capabilities
+        value:
+          drop:
+            - ALL
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext/seccompProfile
+        value:
+          type: RuntimeDefault

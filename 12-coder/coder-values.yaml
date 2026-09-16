@@ -20,5 +20,13 @@ coder:
           key: client-secret
     - name: CODER_OAUTH2_GITHUB_ALLOWED_ORGS
       value: "henry-miller-frazier"
+  # Chart default requests 2 CPU / 4Gi; observed 7-day peak is ~320Mi and <50m CPU.
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
   service:
     type: ClusterIP

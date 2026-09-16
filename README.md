@@ -6,7 +6,7 @@ A single-node [Talos Linux](https://www.talos.dev/) Kubernetes cluster running o
 
 - AMD Ryzen (Zen2/Zen3, "Matisse/Vermeer") CPU, no integrated GPU
 - AMD Radeon RX 6950 XT (Navi 21 / RDNA2) discrete GPU — used for Jellyfin hardware transcoding
-- 3 disks: an NVMe boot disk, plus a 2TB NVMe, an 8TB SATA SSD, and a 1TB SATA SSD dedicated to workloads
+- 4 disks: an NVMe boot disk, plus a 2TB NVMe, an 8TB SATA SSD, and a 1TB SATA SSD dedicated to workloads
 - Single NIC networking on a home LAN (`10.42.0.0/24`)
 
 ## Repository layout
@@ -331,3 +331,5 @@ set-inform http://10.42.0.15:8080/inform
 
 - `talosconfig`, `controlplane.yaml`, `worker.yaml`, and `cloudflare-secret.yaml` are gitignored — they contain cluster PKI private keys, join tokens, and a plaintext API token. Never commit them.
 - All in-repo secrets are `SealedSecret`s, decryptable only by the sealed-secrets controller running in this specific cluster.
+- Every namespace carries [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/) labels. `argocd`, `traefik`, `cert-manager`, `kubevirt-manager`, `minecraft`, and `palworld` enforce `restricted`; `dashboard`, `coder`, and `default` enforce `baseline` (Homepage runs as root, Coder workspaces may need capabilities, VMs need `virt-launcher`) and warn at `restricted`; `media`, `monitoring`, `unifi`, `kubevirt`, `cdi`, `metallb-system`, and `local-path-storage` are `privileged` because a workload in each genuinely needs it. Check `kubectl label --dry-run=server --overwrite ns <ns> pod-security.kubernetes.io/enforce=restricted` before tightening one.
+- Resource requests on the media stack, Homepage, and Coder were sized from seven days of Prometheus data (peak working-set memory, p95 CPU) with memory limits at roughly three times the observed peak and no CPU limits on bursty workloads such as Jellyfin transcoding.

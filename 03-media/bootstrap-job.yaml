@@ -27,6 +27,12 @@ spec:
             # Hosts SABnzbd will accept in the HTTP Host header (its own reverse-proxy guard).
             - name: SAB_HOST_WHITELIST
               value: "sabnzbd.k8s.noelmiller.dev,sabnzbd,sabnzbd.media,sabnzbd.media.svc.cluster.local,"
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
           volumeMounts:
             - name: script
               mountPath: /scripts

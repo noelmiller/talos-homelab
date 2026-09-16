@@ -26,6 +26,7 @@ spec:
         - http://argocd-server.argocd.svc.cluster.local/
         - http://kubevirt-manager.kubevirt-manager.svc.cluster.local:8080/
         - http://monitoring-grafana.monitoring.svc.cluster.local/
+        - http://coder.coder.svc.cluster.local/healthz
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: Probe
@@ -52,3 +53,7 @@ spec:
         - unifi-unifi-os-server-webui.unifi.svc.cluster.local:443
         - unifi-unifi-os-server-communication.unifi.svc.cluster.local:8080
         - kubernetes.default.svc.cluster.local:443
+        # End-to-end through the Linode relay, Tailscale, and pfSense back to
+        # the MetalLB addresses. Fails if any hop in the public game path breaks.
+        - 172.233.217.64:25565
+        - 172.233.217.64:25566
