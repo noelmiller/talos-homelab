@@ -1,38 +1,152 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
+  "extends": [
+    "config:recommended"
+  ],
   "timezone": "America/Chicago",
-  "schedule": ["every weekend"],
+  "schedule": [
+    "every weekend"
+  ],
   "kubernetes": {
-    "managerFilePatterns": ["/^03-media/.+\\.yaml$/", "/^05-dashboard/.+\\.yaml$/", "/^07-minecraft/.+\\.yaml$/"]
+    "managerFilePatterns": [
+      "/^03-media/.+\\.yaml$/",
+      "/^05-dashboard/.+\\.yaml$/",
+      "/^07-minecraft/.+\\.yaml$/",
+      "/^09-palworld/.+\\.yaml$/"
+    ]
   },
+  "customDatasources": {
+    "geysermc": {
+      "description": "GeyserMC download API; exposes the newest build of a project as <version>/builds/<build>",
+      "defaultRegistryUrlTemplate": "https://download.geysermc.org/v2/projects/{{packageName}}/versions/latest/builds/latest",
+      "transformTemplates": [
+        "{ \"releases\": [ { \"version\": version & \"/builds/\" & $string(build), \"releaseTimestamp\": time } ] }"
+      ]
+    }
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Upstream manifests pulled by URL in kustomization.yaml (raw.githubusercontent.com/<org>/<repo>/<tag>/... and github.com/<org>/<repo>/releases/download/<tag>/...). Renovate compiles these with RE2, so no lookaround.",
+      "managerFilePatterns": [
+        "/(^|/)kustomization\\.yaml$/"
+      ],
+      "matchStrings": [
+        "https://raw\\.githubusercontent\\.com/(?<depName>[^/\\s]+/[^/\\s]+)/(?<currentValue>v?\\d[^/\\s]*)/",
+        "https://github\\.com/(?<depName>[^/\\s]+/[^/\\s]+)/releases/download/(?<currentValue>v?\\d[^/\\s]*)/"
+      ],
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "kubevirt-manager bundle: the version appears twice in the URL, so rewrite the whole string. Uses its own depName so the generic manager's match for this URL can be disabled below.",
+      "managerFilePatterns": [
+        "/^06-virtualization/kustomization\\.yaml$/"
+      ],
+      "matchStrings": [
+        "https://github\\.com/kubevirt-manager/kubevirt-manager/releases/download/(?<currentValue>v[\\d.]+)/bundled-v[\\d.]+\\.yaml"
+      ],
+      "depNameTemplate": "kubevirt-manager-bundle",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver-coerced",
+      "autoReplaceStringTemplate": "https://github.com/kubevirt-manager/kubevirt-manager/releases/download/{{{newValue}}}/bundled-{{{newValue}}}.yaml",
+      "packageNameTemplate": "kubevirt-manager/kubevirt-manager"
+    },
+    {
+      "customType": "regex",
+      "description": "Geyser and Floodgate Paper plugins pinned by version and build",
+      "managerFilePatterns": [
+        "/^07-minecraft/common\\.env$/"
+      ],
+      "matchStrings": [
+        "https://download\\.geysermc\\.org/v2/projects/(?<depName>geyser|floodgate)/versions/(?<currentValue>\\d+\\.\\d+\\.\\d+/builds/\\d+)/downloads/spigot"
+      ],
+      "datasourceTemplate": "custom.geysermc",
+      "versioningTemplate": "regex:^(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)/builds/(?<build>\\d+)$"
+    }
+  ],
   "packageRules": [
     {
-      "matchDatasources": ["docker"],
-      "matchPackageNames": ["lscr.io/linuxserver/**"],
-      "groupName": "media stack",
+      "description": "Pin every container image in raw Kubernetes manifests by digest",
+      "matchManagers": [
+        "kubernetes"
+      ],
+      "matchDatasources": [
+        "docker"
+      ],
       "pinDigests": true
     },
     {
-      "matchDatasources": ["docker"],
-      "matchPackageNames": ["itzg/minecraft-server", "itzg/mc-backup"],
-      "groupName": "minecraft",
-      "pinDigests": true
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "lscr.io/linuxserver/**"
+      ],
+      "groupName": "media stack"
+    },
+    {
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "itzg/minecraft-server",
+        "itzg/mc-backup"
+      ],
+      "groupName": "minecraft"
     },
     {
       "description": "Keep Ombi's MySQL database on the 8.4 LTS release line",
-      "matchDatasources": ["docker"],
-      "matchPackageNames": ["mysql"],
-      "matchFileNames": ["03-media/ombi-mysql.yaml"],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "mysql"
+      ],
+      "matchFileNames": [
+        "03-media/ombi-mysql.yaml"
+      ],
       "allowedVersions": "/^8\\.4(?:\\.|$)/"
     },
     {
-      "matchManagers": ["kustomize"],
-      "matchDepTypes": ["HelmChart"],
+      "matchManagers": [
+        "kustomize"
+      ],
+      "matchDepTypes": [
+        "HelmChart"
+      ],
       "groupName": "cluster helm charts"
     },
     {
-      "matchFileNames": ["**/charts/**"],
+      "description": "The generic URL manager also sees the kubevirt-manager bundle but would only rewrite the first of the two version occurrences; the dedicated manager above handles it",
+      "matchDepNames": [
+        "kubevirt-manager/kubevirt-manager"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "KubeVirt and CDI release together; bump them in one PR",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "kubevirt/kubevirt",
+        "kubevirt/containerized-data-importer"
+      ],
+      "groupName": "kubevirt"
+    },
+    {
+      "description": "Geyser and Floodgate move together with Paper; bump them in one PR",
+      "matchDatasources": [
+        "custom.geysermc"
+      ],
+      "groupName": "geyser"
+    },
+    {
+      "matchFileNames": [
+        "**/charts/**"
+      ],
       "enabled": false
     }
   ]

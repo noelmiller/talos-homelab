@@ -10,7 +10,6 @@ resources:
   - https://github.com/kubevirt-manager/kubevirt-manager/releases/download/v1.5.4/bundled-v1.5.4.yaml
   - kubevirt-manager-route.yaml
   - lan-network.yaml
-  - web-test-vm.yaml
 
 images:
   - name: ghcr.io/k8snetworkplumbingwg/multus-cni
