@@ -28,6 +28,8 @@ metrics-server-kubelet-patch.yaml Talos KubeletConfig patch enabling serving-cer
 10-linode-relay/                  Terraform for the public WireGuard game relay
 11-unifi/                         UniFi OS Server network appliance
 12-coder/                         Coder remote development environments with PostgreSQL
+tests/                            On-demand smoke-test manifests, never applied by ArgoCD
+.github/workflows/                CI: renders every layer, schema-checks it, validates Terraform
 ```
 
 ## Prerequisites
@@ -240,7 +242,7 @@ Palworld publishes itself in the community browser with the Linode address
 
 The `monitoring` namespace runs the `kube-prometheus-stack` and Prometheus Blackbox Exporter. Prometheus retains up to 15 days or 25 GB of metrics on a 30 GiB `sata-1tb` PVC. It collects Kubernetes API, kubelet/cAdvisor, node-exporter, and kube-state-metrics data, providing cluster, node, namespace, pod, container, and persistent-volume telemetry. Native metrics from ArgoCD, Traefik, cert-manager, sealed-secrets, and all metrics-capable components installed by the stack are discovered through PodMonitor and ServiceMonitor resources.
 
-Blackbox probes cover every application-facing HTTP or TCP service in this repository, including the media stack, Homepage, ArgoCD, KubeVirt Manager, the test VM, MySQL, both Minecraft servers, Palworld's cluster-internal REST endpoint, Grafana, and the Kubernetes API. The `ApplicationServiceUnavailable` alert fires after a probe has failed for five minutes, while `ApplicationServiceSlow` detects HTTP endpoints taking longer than five seconds.
+Blackbox probes cover every application-facing HTTP or TCP service in this repository, including the media stack, Homepage, ArgoCD, KubeVirt Manager, MySQL, both Minecraft servers, Palworld's cluster-internal REST endpoint, Grafana, and the Kubernetes API. The `ApplicationServiceUnavailable` alert fires after a probe has failed for five minutes, while `ApplicationServiceSlow` detects HTTP endpoints taking longer than five seconds.
 
 Alerts are delivered to a Discord channel. Alertmanager reads the webhook URL from the `alertmanager-discord` Secret, committed as a `SealedSecret`. To create or rotate it, make a webhook in Discord (channel settings → Integrations → Webhooks), then seal it without leaving the URL in shell history:
 

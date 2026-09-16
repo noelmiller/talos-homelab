@@ -25,7 +25,6 @@ spec:
         - https://dashboard.k8s.noelmiller.dev/
         - http://argocd-server.argocd.svc.cluster.local/
         - http://kubevirt-manager.kubevirt-manager.svc.cluster.local:8080/
-        - http://web-test.default.svc.cluster.local:8080/
         - http://monitoring-grafana.monitoring.svc.cluster.local/
 ---
 apiVersion: monitoring.coreos.com/v1
