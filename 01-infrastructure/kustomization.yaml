@@ -38,24 +38,12 @@ helmCharts:
           expose:
             default: true
           exposedPort: 443
-      persistence:
-        enabled: true
-        storageClass: sata-1tb
-        size: 128Mi
-        path: /data
       additionalArguments:
-        # 1. HTTP to HTTPS Redirection
+        # HTTP to HTTPS redirection. TLS certificates come from cert-manager
+        # (02-configuration/cluster-issuer.yaml), not Traefik's own ACME resolver.
         - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
         - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
-        # 2. ACME / Let's Encrypt Configuration
-        - "--certificatesresolvers.letsencrypt.acme.email=noel@noelmiller.dev"
-        - "--certificatesresolvers.letsencrypt.acme.storage=/data/acme.json"
-        - "--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare"
-        - "--certificatesresolvers.letsencrypt.acme.dnschallenge.delaybeforecheck=0"
-      envFrom:
-        - secretRef:
-            name: cloudflare-api-token
-  
+
   - name: metrics-server
     repo: https://kubernetes-sigs.github.io/metrics-server/
     releaseName: metrics-server
