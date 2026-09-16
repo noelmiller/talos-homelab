@@ -92,7 +92,7 @@ This layer installs, via a mix of raw upstream manifests and Helm charts declare
 - **local-path-provisioner** — dynamic PVC provisioning backed by the 3 data disks, mapped to storage classes by node path (see the `local-path-config` patch)
 - **MetalLB** (L2 mode) — LoadBalancer IPs for bare metal, pool defined in `02-configuration`
 - **Gateway API CRDs** (v1.6.1, standard + experimental channel — Traefik needs both, even for features you don't use, or its provider will never sync)
-- **Traefik** — ingress gateway via the Kubernetes Gateway API provider, with automatic Let's Encrypt via Cloudflare DNS-01
+- **Traefik** — ingress gateway via the Kubernetes Gateway API provider; TLS comes from the cert-manager wildcard cert, Traefik's own ACME resolver is not used
 - **sealed-secrets** — encrypts secrets so they're safe to commit to a public git repo
 - **cert-manager** — issues the wildcard TLS cert used by the Gateway
 - **kubelet-serving-cert-approver** — auto-approves kubelet serving-certificate CSRs so kubelets get certs signed by the cluster CA instead of self-signed ones
@@ -119,16 +119,14 @@ kubectl kustomize . --enable-helm | kubectl apply --server-side --force-conflict
 
 ### Cloudflare API token secret
 
-Traefik and cert-manager both need a Cloudflare API token (DNS edit scope) to complete ACME DNS-01 challenges. It's stored as a `SealedSecret` (safe to commit) in `02-configuration/sealed-cloudflare-secret*.yaml`. To (re)generate for a fresh cluster (the sealed-secrets controller's key is per-cluster, so old sealed secrets from another cluster won't decrypt):
+cert-manager needs a Cloudflare API token (DNS edit scope) to complete ACME DNS-01 challenges. It's stored as a `SealedSecret` (safe to commit) in `02-configuration/sealed-cloudflare-secret-cert-manager.yaml`. To (re)generate for a fresh cluster (the sealed-secrets controller's key is per-cluster, so old sealed secrets from another cluster won't decrypt):
 
 ```bash
-kubectl create secret generic cloudflare-api-token -n traefik \
+kubectl create secret generic cloudflare-api-token -n cert-manager \
   --from-literal=CF_DNS_API_TOKEN=<your-token> --dry-run=client -o json | \
   kubeseal --controller-name sealed-secrets --controller-namespace kube-system --format yaml \
-  > 02-configuration/sealed-cloudflare-secret.yaml
+  > 02-configuration/sealed-cloudflare-secret-cert-manager.yaml
 ```
-
-Repeat for the `cert-manager` namespace copy.
 
 ### GPU passthrough (AMD)
 
