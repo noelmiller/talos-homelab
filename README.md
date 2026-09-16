@@ -155,7 +155,7 @@ Verify with `talosctl ls /dev/dri` (expect `card0` + `renderD128`) and `vainfo` 
 
 ## 4. Cluster-wide configuration (`02-configuration`)
 
-- `storage-classes.yaml` — `nvme-2tb`, `sata-8tb`, `sata-1tb` StorageClasses (`WaitForFirstConsumer`, `reclaimPolicy: Retain`, backed by local-path-provisioner). `Retain` means deleting a PVC leaves the PV `Released` and the data on disk; clean up deliberately with `kubectl delete pv <name>` and then remove the directory under `/var/mnt/<class>/`. `reclaimPolicy` is immutable, so the classes carry `Replace=true` and ArgoCD recreates them on change; existing PVs are unaffected.
+- `storage-classes.yaml` — `nvme-2tb`, `sata-8tb`, `sata-1tb` StorageClasses (`WaitForFirstConsumer`, `reclaimPolicy: Retain`, backed by local-path-provisioner). `Retain` means deleting a PVC leaves the PV `Released` and the data on disk; clean up deliberately with `kubectl delete pv <name>` and then remove the directory under `/var/mnt/<class>/`. `reclaimPolicy` is immutable, so the classes carry `Force=true,Replace=true` and ArgoCD deletes and recreates them on change (`Replace=true` alone is still an update and is rejected); existing PVs are unaffected.
 - `metallb-pool.yaml` — `IPAddressPool` + `L2Advertisement` for the LAN
 - `main-gateway.yaml` — the shared `Gateway` (HTTP + HTTPS listeners on `*.<your-domain>`); listener ports must match Traefik's actual EntryPoint ports (`8000`/`8443`), not the externally-exposed Service ports (`80`/`443`)
 - `cluster-issuer.yaml` — cert-manager `ClusterIssuer` (ACME + Cloudflare DNS-01) and a wildcard `Certificate`
