@@ -15,6 +15,12 @@ configMapGenerator:
   - name: minecraft-bedrock-whitelist
     files:
       - bedrock-whitelist.json
+  - name: minecraft-common-env
+    envs:
+      - common.env
+  - name: minecraft-backup-env
+    envs:
+      - backup.env
 
 patches:
   # Never let an Argo CD prune or a cascading Application delete remove a PVC.
