@@ -210,7 +210,7 @@ MetalLB exposes the servers on dedicated LAN addresses:
 | Survival | `10.42.0.12` | `25565/TCP` | `19132/UDP` |
 | Creative | `10.42.0.13` | `25566/TCP` | `19133/UDP` |
 
-Both servers enforce an explicit player whitelist. Keep `WHITELIST` in `server.yaml` and `creative.yaml` limited to known Java or Floodgate player names.
+Both servers enforce an explicit player whitelist. Keep `WHITELIST` in `07-minecraft/common.env` limited to known Java or Floodgate player names. That file holds every setting shared by both servers (Paper version, Geyser/Floodgate plugin URLs, whitelist, RCON); only per-server values such as memory, MOTD, difficulty, and game mode live in `server.yaml` and `creative.yaml`. kustomize hashes the file into the ConfigMap name, so editing it rolls both servers.
 
 Java players are managed with the `WHITELIST` environment variable. Bedrock
 players are managed once for both servers through

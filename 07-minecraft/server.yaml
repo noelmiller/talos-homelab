@@ -33,53 +33,18 @@ spec:
             capabilities:
               drop:
                 - ALL
+          envFrom:
+            - configMapRef:
+                name: minecraft-common-env
           env:
-            - name: EULA
-              value: "TRUE"
-            - name: TYPE
-              value: PAPER
-            - name: VERSION
-              value: "26.2"
             - name: MEMORY
               value: 6G
-            - name: TZ
-              value: America/Chicago
             - name: MOTD
               value: Noel's Minecraft Server
             - name: DIFFICULTY
               value: normal
             - name: MODE
               value: survival
-            - name: MAX_PLAYERS
-              value: "10"
-            - name: VIEW_DISTANCE
-              value: "10"
-            - name: SIMULATION_DISTANCE
-              value: "8"
-            - name: ONLINE_MODE
-              value: "TRUE"
-            - name: ENFORCE_SECURE_PROFILE
-              value: "FALSE"
-            - name: ENABLE_WHITELIST
-              value: "TRUE"
-            - name: ENFORCE_WHITELIST
-              value: "TRUE"
-            - name: WHITELIST
-              value: dogphilosopher
-            - name: WHITELIST_FILE
-              value: /config/bedrock-whitelist.json
-            - name: EXISTING_WHITELIST_FILE
-              value: SYNC_FILE_MERGE_LIST
-            - name: ENABLE_RCON
-              value: "TRUE"
-            - name: RCON_PASSWORD_FILE
-              value: /run/secrets/rcon/password
-            - name: PLUGINS
-              value: |
-                https://download.geysermc.org/v2/projects/geyser/versions/2.11.2/builds/1234/downloads/spigot
-                https://download.geysermc.org/v2/projects/floodgate/versions/2.2.5/builds/140/downloads/spigot
-            - name: MODRINTH_PROJECTS
-              value: paper:distant-horizons-support:0.14.0
           ports:
             - name: java
               containerPort: 25565
@@ -124,21 +89,12 @@ spec:
             capabilities:
               drop:
                 - ALL
+          envFrom:
+            - configMapRef:
+                name: minecraft-backup-env
           env:
-            - name: TZ
-              value: America/Chicago
             - name: BACKUP_NAME
               value: minecraft
-            - name: INITIAL_DELAY
-              value: 10m
-            - name: BACKUP_INTERVAL
-              value: 12h
-            - name: PRUNE_BACKUPS_COUNT
-              value: "14"
-            - name: RCON_HOST
-              value: localhost
-            - name: RCON_PASSWORD_FILE
-              value: /run/secrets/rcon/password
           resources:
             requests:
               cpu: 100m
