@@ -27,7 +27,9 @@ wait_for_file /prowlarr-config/config.xml
 
 echo "Creating shared library folders..."
 mkdir -p /data/media/tv /data/media/movies /data/downloads/complete /data/downloads/incomplete
-chown -R 1000:1000 /data
+# Only touch files that aren't already owned by the app user; a blanket chown -R
+# rewrites every inode on the multi-TB library each time this hook runs.
+find /data \( ! -user 1000 -o ! -group 1000 \) -exec chown 1000:1000 {} +
 
 SAB_KEY=$(grep -m1 '^api_key' /sab-config/sabnzbd.ini | sed 's/^api_key = //' | tr -d '\r')
 SONARR_KEY=$(grep -oE '<ApiKey>[^<]+' /sonarr-config/config.xml | sed 's/<ApiKey>//')

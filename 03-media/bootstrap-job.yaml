@@ -3,8 +3,15 @@ kind: Job
 metadata:
   name: media-bootstrap
   namespace: media
+  annotations:
+    # Run as an Argo CD PostSync hook rather than a tracked resource. A tracked
+    # Job with ttlSecondsAfterFinished gets garbage-collected, Argo CD then sees
+    # it missing and self-heals it back, and the script re-runs forever.
+    # BeforeHookCreation deletes the previous Job before creating a new one, so
+    # Job immutability no longer requires a manual delete when the script changes.
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
-  ttlSecondsAfterFinished: 300
   backoffLimit: 6
   template:
     spec:

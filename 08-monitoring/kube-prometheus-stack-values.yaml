@@ -31,7 +31,62 @@ grafana:
       memory: 1Gi
 
 alertmanager:
+  # Every alert goes to Discord. The webhook URL is never in git: it lives in
+  # the alertmanager-discord Secret (sealed-alertmanager-discord.yaml), which
+  # the operator mounts at /etc/alertmanager/secrets/alertmanager-discord/.
+  config:
+    global:
+      resolve_timeout: 5m
+    templates:
+      - /etc/alertmanager/config/*.tmpl
+    route:
+      receiver: discord
+      group_by:
+        - alertname
+        - namespace
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      routes:
+        # Watchdog fires constantly as a heartbeat; InfoInhibitor exists only
+        # to suppress info-level noise. Neither should reach a human.
+        - receiver: "null"
+          matchers:
+            - alertname =~ "Watchdog|InfoInhibitor"
+    receivers:
+      - name: "null"
+      - name: discord
+        discord_configs:
+          - webhook_url_file: /etc/alertmanager/secrets/alertmanager-discord/webhook-url
+            send_resolved: true
+    # Same inhibit rules as the chart defaults, restated because setting
+    # `config` replaces the whole block.
+    inhibit_rules:
+      - source_matchers:
+          - severity = critical
+        target_matchers:
+          - severity =~ warning|info
+        equal:
+          - namespace
+          - alertname
+      - source_matchers:
+          - severity = warning
+        target_matchers:
+          - severity = info
+        equal:
+          - namespace
+          - alertname
+      - source_matchers:
+          - alertname = InfoInhibitor
+        target_matchers:
+          - severity = info
+        equal:
+          - namespace
+      - target_matchers:
+          - alertname = InfoInhibitor
   alertmanagerSpec:
+    secrets:
+      - alertmanager-discord
     retention: 120h
     resources:
       requests:

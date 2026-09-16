@@ -3,23 +3,34 @@ kind: StorageClass
 metadata:
   name: nvme-2tb
   annotations:
+    # reclaimPolicy is immutable, so Argo CD must delete and recreate the class
+    # to change it. Existing PVs/PVCs keep working; they reference the class by name.
+    argocd.argoproj.io/sync-options: Replace=true
     storageclass.kubernetes.io/is-default-class: "true"
 provisioner: rancher.io/local-path
 volumeBindingMode: WaitForFirstConsumer
-reclaimPolicy: Delete
+reclaimPolicy: Retain
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
   name: sata-8tb
+  annotations:
+    # reclaimPolicy is immutable, so Argo CD must delete and recreate the class
+    # to change it. Existing PVs/PVCs keep working; they reference the class by name.
+    argocd.argoproj.io/sync-options: Replace=true
 provisioner: rancher.io/local-path
 volumeBindingMode: WaitForFirstConsumer
-reclaimPolicy: Delete
+reclaimPolicy: Retain
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
   name: sata-1tb
+  annotations:
+    # reclaimPolicy is immutable, so Argo CD must delete and recreate the class
+    # to change it. Existing PVs/PVCs keep working; they reference the class by name.
+    argocd.argoproj.io/sync-options: Replace=true
 provisioner: rancher.io/local-path
 volumeBindingMode: WaitForFirstConsumer
-reclaimPolicy: Delete
+reclaimPolicy: Retain
