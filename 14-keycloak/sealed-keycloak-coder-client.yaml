@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: keycloak-coder-client
+  namespace: keycloak
+spec:
+  encryptedData:
+    client-secret: AgArP6yFX0pt5/uFU/ch6iXvJvxO/vXHPzOYolKkgIXimYNpyBiCIzSjpZtzuRRWs8U6k/+8z8E6aTKM9ptCpbXhhxgHdEVCrpz1c3DBQr1tPH+ufyuxjxy20J2CEIBR2HZloQpSQElCOAV5HFzcr/kdJWWkEF5Ko2ZpJNygS2BWlbxs5wEuV88exvQarm2SKQAeA+2dvYZM29h4QXCiQn8+KbxbwV2HW6zRkBuCkQY1ZQaFbhxw+iwXVznE6OysbaXS/yNpjcRuhHUlBU1vYjhkEPErzi2O9tvnvi2gl/DuGYT7UiPo+pkbthRYZ/Fz+Jfbf3nqk0qWh2GkUDVAqmsqYcAatobd0E/9A6RwbFn5xM9OMwrZrBP15Hz/islHqmUazk7W4Ii/qN1qJMPXYMwZJFwVdIBICI5FB9Q4ORqulxezbEX1ZbdslyWdFWFzVss6tyKcZoJZ07oJxU5OConsA+Jq4jr5bp/UEO09jSxAuTc53X/i7zRkd8+kzdDANvGMa5ihL7ibvWhzyOqRx2rNu+EWp1mqqs+CWQ5cqu2jx0PiVVm7GzPwPsOGUBiv0SMYW+aiHLnDRLD/qiIr3C5MQxSeEiP0UlnMan/RAI53L+muhmfCU8bcRObkn+oZtpE1eY9h8WMqx2L9t1+7uoNCetWxENse4JoPWU/Ebx9tWhn1VP3Bjtk2y0BiQzIBRcMDp+WBnQiajSvLwZ8zCJnog1LXpaSKePiP3Utt3xw0l7xXjFPXaftk
+  template:
+    metadata:
+      name: keycloak-coder-client
+      namespace: keycloak

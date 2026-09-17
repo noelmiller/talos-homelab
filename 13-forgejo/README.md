@@ -127,9 +127,6 @@ major-version upgrade.
 - **Coder integration**: to let Coder workspaces clone over HTTPS without
   prompting, create an OAuth2 application in Forgejo and add a
   `CODER_EXTERNAL_AUTH_0_*` block to `12-coder/coder-values.yaml`.
-- **Coder sign-in through Keycloak**: Coder currently uses GitHub OAuth; it
-  can switch to Keycloak with a second client in `14-keycloak/realm-homelab.json`
-  and `CODER_OIDC_*` settings.
 - **Argo CD webhooks**: `ALLOWED_HOST_LIST` already permits private targets,
   so a repository webhook to `http://argocd-server.argocd.svc.cluster.local/api/webhook`
   works once Argo CD is pointed at a Forgejo-hosted repository.

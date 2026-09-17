@@ -54,6 +54,11 @@ spec:
                 secretKeyRef:
                   name: keycloak-forgejo-client
                   key: client-secret
+            - name: CODER_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-coder-client
+                  key: client-secret
             # Create and update what the realm file declares, but never delete
             # clients, scopes, or groups that were added in the admin console.
             - name: IMPORT_MANAGED_CLIENT

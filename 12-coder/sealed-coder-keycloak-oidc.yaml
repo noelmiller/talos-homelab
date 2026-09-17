@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: coder-keycloak-oidc
+  namespace: coder
+spec:
+  encryptedData:
+    client-secret: AgCvgGGx3tc4hMGz3O8DFKkf7M7m/ez9+43UCeeyiILOclnNxOTX4S6xON3BJpgaZ5077eAOi/F7XhZeLxA8E8v/6Gq8b5wpc5HE52jBOYmRRYVolsSC5N9/ggEtOSDXzA5B9Lq89Z7pbfW7rHtSrVq8p9I8ypHYxYgG6WMn02DFT8gfaGqLRVoT6iKjZcfovrjmwjIKpcDT79nESUSTao76d0HlEvLb2JgvDoczeMSIf6BYWx7+KdB5F7UyYEHBYWujQrrdDqjFHHKYXbmLHldFRRXh7HPcpkxIcI0LFTKGJB4lnAXZWqIrPuQldke/4n+HlYRKInBomXN2FoqNl9itlMuMQCfYdrN+vy5xAcw364s/FBdaJMS+H/59NxUnTYtsUKhQoQ3vKeoOclews/WtSd+cbXKYMYcbbHJdrgH/coBtHELC37pu+6DYEwLlYf3exngPoZtyN7mTp/T1GG69W1xThBSQ73mQIyy/8aU2bc4XM4BCmuVgWHSRrDThV79J06zvEi6nRnghW/hNHEeA6SP7EN5H5DexlACDM0lflLBYyQeqlK860mdDydHCvFp0JW3nmkhVXvwIDtI0SNZJzsSyNz7Svj8og6LA4EIbBuTaRT6w9vdc2U4lDTwCYHRnZZb6lUy4Rq+vg4J6x5mIz+qeB3o6tGkR8oAbkaZu+FIaKxWDc/w2wyadJUxIXPT4sDtVwdoI4xQQVvRtUjqLWpBaCrnVA1f4xpOfB1qhiMXA2boaauoM
+  template:
+    metadata:
+      name: coder-keycloak-oidc
+      namespace: coder
