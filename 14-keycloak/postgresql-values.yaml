@@ -14,6 +14,14 @@ auth:
     userPasswordKey: password
 
 primary:
+  lifecycleHooks:
+    # PostgreSQL treats the kubelet's SIGTERM as a "smart" shutdown and waits
+    # for every client to disconnect. The application's connection pool never
+    # does, so after the grace period the container is killed and the next
+    # start runs crash recovery. Ask for a fast shutdown first.
+    preStop:
+      exec:
+        command: ["/bin/sh", "-c", "pg_ctl -D \"$PGDATA\" -m fast -w -t 25 stop"]
   podAnnotations:
     # Velero (15-velero) copies this volume while PostgreSQL is writing to it,
     # which restores like a power cut. Before each backup it runs this in the
