@@ -6,6 +6,11 @@ kubeEtcd:
   enabled: false
 kubeScheduler:
   enabled: false
+# Talos runs kube-proxy with the default metrics bind address (127.0.0.1:10249),
+# so the scrape can only ever be refused. Exposing it would need
+# `cluster.proxy.extraArgs` in the machine config; not worth it on one node.
+kubeProxy:
+  enabled: false
 
 grafana:
   defaultDashboardsTimezone: browser
@@ -53,6 +58,13 @@ alertmanager:
         - receiver: "null"
           matchers:
             - alertname =~ "Watchdog|InfoInhibitor"
+        # "Default storage class has no smart clone or ReadWriteMany" is
+        # permanently true on a single node with local-path, and harmless:
+        # CDI falls back to host-assisted copy. The rule belongs to the CDI
+        # operator, which reverts edits, so drop it here instead.
+        - receiver: "null"
+          matchers:
+            - alertname = CDIDefaultStorageClassDegraded
     receivers:
       - name: "null"
       - name: discord
@@ -157,10 +169,12 @@ kube-state-metrics:
       memory: 256Mi
 
 prometheus-node-exporter:
+  # No CPU limit: average use is ~3m, but each scrape runs every collector at
+  # once across all cores, and a CFS quota throttled ~40% of periods
+  # (CPUThrottlingHigh) without saving anything.
   resources:
     requests:
       cpu: 50m
       memory: 64Mi
     limits:
-      cpu: 250m
       memory: 256Mi
