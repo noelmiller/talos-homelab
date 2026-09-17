@@ -337,7 +337,10 @@ The `homelab` realm is defined in git
 ([14-keycloak/realm-homelab.json](14-keycloak/realm-homelab.json)) and
 applied by a `keycloak-config-cli` Job that runs as an Argo CD **PostSync
 hook** after every sync, so the realm, the `forgejo` and `coder` OIDC
-clients, the `groups` claim, and the `forgejo-admins` group are reproducible. The Job only
+clients, the `groups` claim, the `forgejo-admins` group, and the GitHub
+identity provider are reproducible. GitHub sign-in only links to users that
+already exist in the realm (after a one-time password check); it never
+creates accounts. The Job only
 creates and updates; anything added in the admin console is left alone. Each
 client secret is a `SealedSecret` sealed twice, once for each namespace, and
 substituted into the realm at import time.

@@ -11,6 +11,7 @@ in-cluster PostgreSQL database and is reachable at
 - `sealed-keycloak-admin.yaml`: sealed bootstrap admin (`username`, `password`), also used by the realm import Job.
 - `sealed-keycloak-forgejo-client.yaml`: sealed OIDC client secret for Forgejo (`client-secret`). The same value is sealed for the `forgejo` namespace in `13-forgejo/sealed-forgejo-keycloak-oauth.yaml`.
 - `sealed-keycloak-coder-client.yaml`: sealed OIDC client secret for Coder (`client-secret`). The same value is sealed for the `coder` namespace in `12-coder/sealed-coder-keycloak-oidc.yaml`.
+- `sealed-keycloak-github-idp.yaml`: sealed GitHub OAuth App credentials for the `github` identity provider (`client-id`, `client-secret`).
 - `postgresql-values.yaml`: Bitnami PostgreSQL chart values (10Gi on `nvme-2tb`), image pinned to the same PostgreSQL 18 digest as Coder and Forgejo.
 - `keycloak.yaml`: Deployment (1 replica, `Recreate`), Service (`8080` http, `9000` management), and a ServiceMonitor for `/metrics`.
 - `keycloak-route.yaml`: `HTTPRoute` for `auth.k8s.noelmiller.dev` on `main-gateway`.
@@ -27,6 +28,7 @@ five minutes.
 ## Realm as code
 `realm-homelab.json` declares:
 - realm `homelab`: no self-registration, e-mail login, brute-force protection;
+- identity provider `github` and its first-login flow `github link existing` (see "Sign in with GitHub" below);
 - group `forgejo-admins`;
 - client scope `groups` with a group-membership mapper (claim `groups`);
 - confidential client `forgejo` with redirect URI `https://git.k8s.noelmiller.dev/user/oauth2/keycloak/callback` and the `groups` scope by default;
@@ -34,12 +36,13 @@ five minutes.
 
 `realm-import-job.yaml` runs [keycloak-config-cli](https://github.com/adorsys/keycloak-config-cli)
 as an Argo CD PostSync hook after every successful sync. The client secret
-placeholders `$(env:FORGEJO_OAUTH_CLIENT_SECRET)` and
-`$(env:CODER_OIDC_CLIENT_SECRET)` are resolved from the sealed Secrets at
+placeholders `$(env:FORGEJO_OAUTH_CLIENT_SECRET)`,
+`$(env:CODER_OIDC_CLIENT_SECRET)`, and `$(env:GITHUB_IDP_CLIENT_ID)` /
+`$(env:GITHUB_IDP_CLIENT_SECRET)` are resolved from the sealed Secrets at
 import time, so the secrets never appear in git. The Job creates
 and updates the declared objects but is configured with `no-delete` for
-clients, client scopes, and groups, so anything created by hand in the admin
-console survives. Edit the JSON and push to change the realm; kustomize hashes
+clients, client scopes, groups, authentication flows, and identity providers,
+so anything created by hand in the admin console survives. Edit the JSON and push to change the realm; kustomize hashes
 the file into the ConfigMap name, which re-creates the Job.
 
 The CLI image tag suffix (`26.5.5`) is the Keycloak version it was built
@@ -67,6 +70,34 @@ major version. Bump both together when a new CLI release appears.
    unverified addresses), then open `https://coder.k8s.noelmiller.dev` and
    choose **Sign in with Keycloak**. Keycloak is Coder's only sign-in
    provider; see `12-coder/README.md` for break-glass access.
+
+## Sign in with GitHub
+The login page offers a **GitHub** button, which Forgejo and Coder inherit
+because they only ever see Keycloak. GitHub is a second way into an
+*existing* Keycloak user, not a way to get one:
+
+- `registrationAllowed: false` does not apply to brokered logins, and the
+  built-in `first broker login` flow would create a Keycloak user (and with
+  it a Coder and Forgejo account) for any GitHub user. The provider therefore
+  uses the custom flow `github link existing`.
+- Step 1, *Detect existing broker user*: the GitHub account's primary e-mail
+  (or login name) must match a user you already created in the realm;
+  everyone else is rejected and nothing is created.
+- Step 2, *Username password form for re-authentication*: on the first GitHub
+  sign-in the matched user proves their Keycloak password once, which links
+  the GitHub account. Later GitHub sign-ins go straight through. Automatic
+  linking is deliberately not used: the match falls back to the login name,
+  so a GitHub user named like one of your Keycloak users could otherwise take
+  that account over.
+- Links are listed under Users → the user → **Identity provider links**, and
+  can be added or removed by the user at
+  `https://auth.k8s.noelmiller.dev/realms/homelab/account` → Account security
+  → Linked accounts.
+- Password sign-in to Keycloak keeps working when GitHub is unavailable.
+
+The GitHub OAuth App (GitHub → Settings → Developer settings → OAuth Apps):
+- **Homepage URL**: `https://auth.k8s.noelmiller.dev`
+- **Authorization callback URL**: `https://auth.k8s.noelmiller.dev/realms/homelab/broker/github/endpoint`
 
 ## Rotating credentials
 Bootstrap admin (only takes effect on an empty database; afterwards change
@@ -113,6 +144,25 @@ kubectl create secret generic coder-keycloak-oidc --namespace coder \
   kubeseal --format yaml --controller-name sealed-secrets --controller-namespace kube-system \
   > 12-coder/sealed-coder-keycloak-oidc.yaml
 unset client_secret
+```
+
+GitHub identity provider (client ID from the OAuth App page, then generate a
+new client secret there; the next sync updates the provider):
+
+```sh
+# zsh syntax; in bash use `read -rp "prompt" var` / `read -rsp "prompt" var`.
+read -r "gh_id?GitHub client ID: "
+read -rs "gh_secret?GitHub client secret: "; echo
+if [ -n "$gh_id" ] && [ -n "$gh_secret" ]; then
+  kubectl create secret generic keycloak-github-idp --namespace keycloak \
+    --from-literal=client-id="$gh_id" --from-literal=client-secret="$gh_secret" \
+    --dry-run=client -o yaml |
+    kubeseal --format yaml --controller-name sealed-secrets --controller-namespace kube-system \
+    > 14-keycloak/sealed-keycloak-github-idp.yaml
+else
+  echo "empty value, nothing written" >&2
+fi
+unset gh_id gh_secret
 ```
 
 PostgreSQL: same procedure and caveats as `13-forgejo/README.md`.
