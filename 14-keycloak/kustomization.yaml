@@ -7,6 +7,7 @@ resources:
   - sealed-keycloak-admin.yaml
   - sealed-keycloak-forgejo-client.yaml
   - sealed-keycloak-coder-client.yaml
+  - sealed-keycloak-argocd-client.yaml
   - sealed-keycloak-github-idp.yaml
   - keycloak.yaml
   - keycloak-route.yaml

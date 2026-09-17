@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: keycloak-argocd-client
+  namespace: keycloak
+spec:
+  encryptedData:
+    client-secret: AgBP+Aq8F6F0Fci0Ux53Epe/MyD74UkRjZw18r5pu7nn6PajAb8UJe4kkgdzR8YYK756ZWRRyAA9gnTj/NURMhdVGdrIS6WJO7S+lSNck5C2uV+bSm3CZY6KMDjQXnpIv/Yw5/llFfs9tt2GDhcl4YdISjOxuBMBGRkqO+3/S/EhYHKCQAdxppH6VoehFNWF+cZcKVKtEuGot4PF5J2Ex8KREEtzhY67g8E6znMvfsw+4T0BuexY85sfTg6RfLq+UK64O1PxmOYKJNQtbg+FxTWn+c5KbJysNqfqyR1+Ee5UYJc7NvdYtBfA4FTODXew3nXRSpsA6ieNIsDxuZGK3dvWssbUucQCwabDHTdu/aAb2ZHXL0p34O1zRMjUCSaJt6eIDIJYASK/Swcw/fQyD+Qt438tbRfbG2vlm2F1UMQoSBzDPOPB/FoFTh0QlkwDZYQC72PjnLQycVV/GD/5Aezp9xF8wYlG8P8qSF/n+jvWB534QNCSQbUXAiwfm6Uxht0+I+bmowos+ZTBpPih+q7kRhi3VRTCtlMjnFEvuGwfUKWV3VMPKzEvdr1fFYnIGXMKy7HcwsGfKk8q4f0e7YUYbYZQTyZ5YGnHn3VjiB8n3GTb4IuJmnjnJfQRGHP/tn0SdM5w0NuLra0EBrMIMn8xAtuqJwag+iV3Y1Z3ZZBli/arGsI1xRcWUqVJNMsVyk1YIblxOMPFv1CdmeS9mjW1ZrMwu01lHgr72Luqy8LyUIMvO+5vxQO6
+  template:
+    metadata:
+      name: keycloak-argocd-client
+      namespace: keycloak
