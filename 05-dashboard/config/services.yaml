@@ -33,10 +33,18 @@
         href: https://coder.k8s.noelmiller.dev
         description: Remote development environments
         icon: coder.png
+    - Forgejo:
+        href: https://git.k8s.noelmiller.dev
+        description: Git hosting and code review
+        icon: forgejo.png
     - Grafana:
         href: https://grafana.k8s.noelmiller.dev
         description: Metrics and service health
         icon: grafana.png
+    - Keycloak:
+        href: https://auth.k8s.noelmiller.dev
+        description: Single sign-on
+        icon: keycloak.png
     - KubeVirt Manager:
         href: https://kubevirt.k8s.noelmiller.dev
         description: Virtual machine management

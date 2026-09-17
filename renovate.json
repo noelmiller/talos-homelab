@@ -12,7 +12,8 @@
       "/^03-media/.+\\.yaml$/",
       "/^05-dashboard/.+\\.yaml$/",
       "/^07-minecraft/.+\\.yaml$/",
-      "/^09-palworld/.+\\.yaml$/"
+      "/^09-palworld/.+\\.yaml$/",
+      "/^14-keycloak/.+\\.yaml$/"
     ]
   },
   "customDatasources": {

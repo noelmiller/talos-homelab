@@ -1,6 +1,6 @@
 # Talos Homelab — Single-Node Kubernetes Cluster
 
-A single-node [Talos Linux](https://www.talos.dev/) Kubernetes cluster running on bare metal, managed declaratively via `kustomize` and [ArgoCD](https://argo-cd.readthedocs.io/). Hosts a Traefik ingress gateway with automatic Let's Encrypt certs, a GPU-accelerated media stack (Jellyfin, Ombi, Sonarr, Radarr, Prowlarr, SABnzbd), and game servers.
+A single-node [Talos Linux](https://www.talos.dev/) Kubernetes cluster running on bare metal, managed declaratively via `kustomize` and [ArgoCD](https://argo-cd.readthedocs.io/). Hosts a Traefik ingress gateway with automatic Let's Encrypt certs, a GPU-accelerated media stack (Jellyfin, Ombi, Sonarr, Radarr, Prowlarr, SABnzbd), game servers, Coder, a Forgejo git forge, and Keycloak single sign-on.
 
 ## Hardware
 
@@ -28,6 +28,8 @@ metrics-server-kubelet-patch.yaml Talos KubeletConfig patch enabling serving-cer
 10-linode-relay/                  Terraform for the public WireGuard game relay
 11-unifi/                         UniFi OS Server network appliance
 12-coder/                         Coder remote development environments with PostgreSQL
+13-forgejo/                       Forgejo git forge with PostgreSQL, HTTPS and SSH through the Gateway
+14-keycloak/                      Keycloak single sign-on with PostgreSQL and a git-managed realm
 tests/                            On-demand smoke-test manifests, never applied by ArgoCD
 .github/workflows/                CI: renders every layer, schema-checks it, validates Terraform
 ```
@@ -92,7 +94,7 @@ This layer installs, via a mix of raw upstream manifests and Helm charts declare
 - **local-path-provisioner** — dynamic PVC provisioning backed by the 3 data disks, mapped to storage classes by node path (see the `local-path-config` patch)
 - **MetalLB** (L2 mode) — LoadBalancer IPs for bare metal, pool defined in `02-configuration`
 - **Gateway API CRDs** (v1.6.1, standard + experimental channel — Traefik needs both, even for features you don't use, or its provider will never sync)
-- **Traefik** — ingress gateway via the Kubernetes Gateway API provider; TLS comes from the cert-manager wildcard cert, Traefik's own ACME resolver is not used
+- **Traefik** — ingress gateway via the Kubernetes Gateway API provider; TLS comes from the cert-manager wildcard cert, Traefik's own ACME resolver is not used. Besides `web`/`websecure` it has an `ssh` EntryPoint (LoadBalancer port `22` → container `2222`) for Forgejo's git-over-SSH, and `experimentalChannel` is enabled so the provider handles `TCPRoute`
 - **sealed-secrets** — encrypts secrets so they're safe to commit to a public git repo
 - **cert-manager** — issues the wildcard TLS cert used by the Gateway
 - **kubelet-serving-cert-approver** — auto-approves kubelet serving-certificate CSRs so kubelets get certs signed by the cluster CA instead of self-signed ones
@@ -157,7 +159,7 @@ Verify with `talosctl ls /dev/dri` (expect `card0` + `renderD128`) and `vainfo` 
 
 - `storage-classes.yaml` — `nvme-2tb`, `sata-8tb`, `sata-1tb` StorageClasses (`WaitForFirstConsumer`, `reclaimPolicy: Retain`, backed by local-path-provisioner). `Retain` means deleting a PVC leaves the PV `Released` and the data on disk; clean up deliberately with `kubectl delete pv <name>` and then remove the directory under `/var/mnt/<class>/`. `reclaimPolicy` is immutable, so the classes carry `Force=true,Replace=true` and ArgoCD deletes and recreates them on change (`Replace=true` alone is still an update and is rejected); existing PVs are unaffected.
 - `metallb-pool.yaml` — `IPAddressPool` + `L2Advertisement` for the LAN
-- `main-gateway.yaml` — the shared `Gateway` (HTTP + HTTPS listeners on `*.<your-domain>`); listener ports must match Traefik's actual EntryPoint ports (`8000`/`8443`), not the externally-exposed Service ports (`80`/`443`)
+- `main-gateway.yaml` — the shared `Gateway` (HTTP + HTTPS listeners on `*.<your-domain>`, plus a plain `ssh` TCP listener); listener ports must match Traefik's actual EntryPoint ports (`8000`/`8443`/`2222`), not the externally-exposed Service ports (`80`/`443`/`22`)
 - `cluster-issuer.yaml` — cert-manager `ClusterIssuer` (ACME + Cloudflare DNS-01) and a wildcard `Certificate`
 - `argocd-route.yaml` — exposes the ArgoCD UI through the Gateway
 
@@ -189,7 +191,7 @@ Once ArgoCD is running (from step 3), bootstrap the app-of-apps pattern **once**
 kubectl apply -f 04-gitops/root-app.yaml
 ```
 
-This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, `virtualization`, `minecraft`, `monitoring`, `palworld`, `unifi`, and `coder`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
+This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, `virtualization`, `minecraft`, `monitoring`, `palworld`, `unifi`, `coder`, `forgejo`, and `keycloak`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
 
 From here on, the workflow is just:
 
@@ -297,8 +299,58 @@ device and set its inform URL:
 set-inform http://10.42.0.15:8080/inform
 ```
 
+## 11. Forgejo
+
+The `forgejo` namespace runs a single-pod [Forgejo](https://forgejo.org/) git
+forge from the official `forgejo-helm` chart, backed by a Bitnami PostgreSQL
+instance on `nvme-2tb` (same pinned PostgreSQL 18 image as Coder). Repository
+data, LFS objects, and `app.ini` live on a 50 GiB `nvme-2tb` PVC. Namespace
+Pod Security is `restricted`: the rootless image runs as uid 1000 with a
+read-only root filesystem.
+
+| Purpose | Address |
+|---|---|
+| Web UI / API | `https://git.k8s.noelmiller.dev` |
+| Git over SSH | `git@git.k8s.noelmiller.dev` (port 22 on the Traefik LoadBalancer IP) |
+
+Both hostnames resolve to Traefik. HTTPS uses an ordinary `HTTPRoute`; SSH
+uses a Gateway API `TCPRoute` bound to the `ssh` TCP listener on
+`main-gateway`, which maps to Traefik's `ssh` EntryPoint. No extra MetalLB
+address or DNS record is needed.
+
+Sign-in goes through Keycloak (below): the login page offers "Sign in with
+keycloak", a first sign-in creates the Forgejo account automatically, and the
+local registration form is closed. Members of the Keycloak group
+`forgejo-admins` are Forgejo administrators. The local `forgejo_admin`
+account (password in a `SealedSecret`, readable from the unsealed Secret)
+remains as a break-glass login. See [13-forgejo/README.md](13-forgejo/README.md)
+for credential rotation, the Actions runner and Coder integration follow-ups.
+
+## 12. Keycloak
+
+The `keycloak` namespace runs [Keycloak](https://www.keycloak.org/) from the
+official image (raw manifests, Renovate-pinned) with a Bitnami PostgreSQL
+instance on `nvme-2tb`, exposed at `https://auth.k8s.noelmiller.dev` through
+the shared Gateway. Pod Security is `restricted`.
+
+The `homelab` realm is defined in git
+([14-keycloak/realm-homelab.json](14-keycloak/realm-homelab.json)) and
+applied by a `keycloak-config-cli` Job that runs as an Argo CD **PostSync
+hook** after every sync, so the realm, the `forgejo` OIDC client, the
+`groups` claim, and the `forgejo-admins` group are reproducible. The Job only
+creates and updates; anything added in the admin console is left alone. The
+client secret is a `SealedSecret` sealed twice, once for each namespace, and
+substituted into the realm at import time.
+
+After the first sync, log in to the admin console with the bootstrap
+credentials from the unsealed `keycloak-admin` Secret, create a permanent
+administrator in the `master` realm (Keycloak treats the bootstrap admin as
+temporary), then create your user in the `homelab` realm and add it to
+`forgejo-admins`. See [14-keycloak/README.md](14-keycloak/README.md).
+
 ## Networking notes
 
+- The Traefik LoadBalancer IP (`10.42.0.11`) now listens on `22` as well as `80`/`443`. Only Forgejo's `TCPRoute` is attached to that listener; Traefik closes connections that match no route.
 - The cluster's MetalLB pool (`10.42.0.11-10.42.0.48`) is **private/LAN-only** — reachable from your home network, not the public internet. For external access you'd additionally need a public DNS record and port-forwarding/tunnel (e.g. Cloudflare Tunnel) — not currently configured.
 - Point any local DNS override (e.g. a router's custom DNS zone) at the **Gateway/Traefik Service's external IP** (`kubectl -n traefik get svc traefik`), not the node's own IP — they're not the same thing, and only the Service IP has anything actually listening on 80/443.
 - KubeVirt Manager is available at `https://kubevirt.k8s.noelmiller.dev` and is intended only for the trusted LAN. It has broad VM-management permissions and does not enable authentication by default.
@@ -324,12 +376,12 @@ set-inform http://10.42.0.15:8080/inform
   kubectl get pv -o name | xargs -n1 kubectl patch -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
   kubectl get pv -o custom-columns='PV:.metadata.name,CLAIM:.spec.claimRef.name,RECLAIM:.spec.persistentVolumeReclaimPolicy'
   ```
-- PVCs created by operators or StatefulSet `volumeClaimTemplates` (Prometheus, Alertmanager, Coder's PostgreSQL) are not ArgoCD-tracked and are never pruned, but are still only protected on disk by the PV reclaim policy above.
+- PVCs created by operators or StatefulSet `volumeClaimTemplates` (Prometheus, Alertmanager, and the Coder, Forgejo, and Keycloak PostgreSQL instances) are not ArgoCD-tracked and are never pruned, but are still only protected on disk by the PV reclaim policy above.
 - This is a single node with no off-node backups yet. Minecraft and Palworld backups live on the same machine as the data they protect.
 
 ## Security notes
 
 - `talosconfig`, `controlplane.yaml`, `worker.yaml`, and `cloudflare-secret.yaml` are gitignored — they contain cluster PKI private keys, join tokens, and a plaintext API token. Never commit them.
 - All in-repo secrets are `SealedSecret`s, decryptable only by the sealed-secrets controller running in this specific cluster.
-- Every namespace carries [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/) labels. `argocd`, `traefik`, `cert-manager`, `kubevirt-manager`, `minecraft`, and `palworld` enforce `restricted`; `dashboard`, `coder`, and `default` enforce `baseline` (Homepage runs as root, Coder workspaces may need capabilities, VMs need `virt-launcher`) and warn at `restricted`; `media`, `monitoring`, `unifi`, `kubevirt`, `cdi`, `metallb-system`, and `local-path-storage` are `privileged` because a workload in each genuinely needs it. Check `kubectl label --dry-run=server --overwrite ns <ns> pod-security.kubernetes.io/enforce=restricted` before tightening one.
+- Every namespace carries [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/) labels. `argocd`, `traefik`, `cert-manager`, `kubevirt-manager`, `minecraft`, `palworld`, `forgejo`, and `keycloak` enforce `restricted`; `dashboard`, `coder`, and `default` enforce `baseline` (Homepage runs as root, Coder workspaces may need capabilities, VMs need `virt-launcher`) and warn at `restricted`; `media`, `monitoring`, `unifi`, `kubevirt`, `cdi`, `metallb-system`, and `local-path-storage` are `privileged` because a workload in each genuinely needs it. Check `kubectl label --dry-run=server --overwrite ns <ns> pod-security.kubernetes.io/enforce=restricted` before tightening one.
 - Resource requests on the media stack, Homepage, and Coder were sized from seven days of Prometheus data (peak working-set memory, p95 CPU) with memory limits at roughly three times the observed peak and no CPU limits on bursty workloads such as Jellyfin transcoding.

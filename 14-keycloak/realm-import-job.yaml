@@ -1,0 +1,90 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-realm-import
+  namespace: keycloak
+  annotations:
+    # Same hook pattern as 03-media/bootstrap-job.yaml: runs after every
+    # successful sync of the keycloak Application and is idempotent.
+    # BeforeHookCreation deletes the previous Job first, so a changed realm
+    # file (and the resulting new ConfigMap hash) needs no manual cleanup.
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: keycloak-config-cli
+          # Tag suffix is the Keycloak version the CLI was built against.
+          image: docker.io/adorsys/keycloak-config-cli:6.5.1-26.5.5@sha256:0955d98c8a341898b7aa177477edf8a1e90569ae50bbe7598141c1270b773274
+          env:
+            - name: KEYCLOAK_URL
+              value: http://keycloak.keycloak.svc.cluster.local:8080
+            - name: KEYCLOAK_USER
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-admin
+                  key: username
+            - name: KEYCLOAK_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-admin
+                  key: password
+            # Wait for Keycloak to answer before importing.
+            - name: KEYCLOAK_AVAILABILITYCHECK_ENABLED
+              value: "true"
+            - name: KEYCLOAK_AVAILABILITYCHECK_TIMEOUT
+              value: 300s
+            - name: IMPORT_FILES_LOCATIONS
+              value: /config/*.json
+            # Resolve $(env:NAME) placeholders in the realm file, so the client
+            # secret comes from the sealed Secret instead of git.
+            - name: IMPORT_VARSUBSTITUTION_ENABLED
+              value: "true"
+            - name: FORGEJO_OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-forgejo-client
+                  key: client-secret
+            # Create and update what the realm file declares, but never delete
+            # clients, scopes, or groups that were added in the admin console.
+            - name: IMPORT_MANAGED_CLIENT
+              value: no-delete
+            - name: IMPORT_MANAGED_CLIENT_SCOPE
+              value: no-delete
+            - name: IMPORT_MANAGED_GROUP
+              value: no-delete
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: realm
+              mountPath: /config
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: realm
+          configMap:
+            name: keycloak-realm
+        - name: tmp
+          emptyDir: {}

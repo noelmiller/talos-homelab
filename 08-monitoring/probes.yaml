@@ -27,6 +27,8 @@ spec:
         - http://kubevirt-manager.kubevirt-manager.svc.cluster.local:8080/
         - http://monitoring-grafana.monitoring.svc.cluster.local/
         - http://coder.coder.svc.cluster.local/healthz
+        - http://forgejo-http.forgejo.svc.cluster.local:3000/api/healthz
+        - http://keycloak.keycloak.svc.cluster.local:9000/health/ready
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: Probe
@@ -52,6 +54,9 @@ spec:
         - palworld-monitoring.palworld.svc.cluster.local:8212
         - unifi-unifi-os-server-webui.unifi.svc.cluster.local:443
         - unifi-unifi-os-server-communication.unifi.svc.cluster.local:8080
+        - forgejo-ssh.forgejo.svc.cluster.local:22
+        - forgejo-postgresql.forgejo.svc.cluster.local:5432
+        - keycloak-postgresql.keycloak.svc.cluster.local:5432
         - kubernetes.default.svc.cluster.local:443
         # End-to-end through the Linode relay, Tailscale, and pfSense back to
         # the MetalLB addresses. Fails if any hop in the public game path breaks.

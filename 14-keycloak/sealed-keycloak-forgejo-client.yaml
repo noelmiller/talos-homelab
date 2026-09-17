@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: keycloak-forgejo-client
+  namespace: keycloak
+spec:
+  encryptedData:
+    client-secret: AgCTUO1+JdaXwnroj+0dDmPjSYjvSGeOtRdqaYyeXmRCxubtOqSZZZkcz6Px+ga9XBoF8rklaSPWFOO6k++cX3xY7ZzuLAwKw899SSN2LIbi8uOdAux6W6WIzIjodCgFN4QKT0OJ13MO2EUlTx8mGCNeiT1zVXPl+GBeyaf/Votcd/tW567OqaQ3WYhleodsV9Q4dRK76NeXAYEr59HjMKswQEwoKtpEIOZX/GVPB2j+Nd9OrSj+Ujt+JF1s5rYDZ357+q6eEUs5cAG4JPua5EDSoG3SIR5gHSMbJy4J9QKdVfsCTHLnVjLjEjxBf53qRKMOVgJ2foCVJQBW7vpwfRualCWC6qXEfVn88NtMfbUoavWFlxDSbPW0YbNOGSKrgbfLhJJiv/bgPJ4ZmdD3f5iTPSMAm9Uz319+szDQl+69jlU/iQBdKggbrIrNiAZbasjdIU7koQ5lrtaNBLW8uBpEiM5rg4C3HlmcPGDPehJTaVuAOeaAWc4msNZEs3F7+w1KyKEBBYraLOK1jroaw33qYFprx4aVhxc4YLZciRuYSmIibvDTDUWfgnk505fzmqCZGJnR0K66uNX/9aM3+HftIyH++nZojlYSVJAbNj48nZBHgcmyfDg8BDEsGe8YBKYHc/2O7T/b421swsXRJDicOAB4/OGnm8Pj3/b6vZQ4hYy/TbYu6v82yLsneW+VbXe4rf1ri5rjnU8x2Rf5k4MI2Am9WewdNJN6BlxzB4YlWg9YVMPAbdEg
+  template:
+    metadata:
+      name: keycloak-forgejo-client
+      namespace: keycloak
