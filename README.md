@@ -28,7 +28,7 @@ metrics-server-kubelet-patch.yaml Talos KubeletConfig patch enabling serving-cer
 10-linode-relay/                  Terraform for the public WireGuard game relay
 11-unifi/                         UniFi OS Server network appliance
 12-coder/                         Coder remote development environments with PostgreSQL
-13-forgejo/                       Forgejo git forge with PostgreSQL, HTTPS and SSH through the Gateway
+13-forgejo/                       Forgejo git forge with PostgreSQL, HTTPS and SSH through Traefik
 14-keycloak/                      Keycloak single sign-on with PostgreSQL and a git-managed realm
 tests/                            On-demand smoke-test manifests, never applied by ArgoCD
 .github/workflows/                CI: renders every layer, schema-checks it, validates Terraform
@@ -93,8 +93,8 @@ This layer installs, via a mix of raw upstream manifests and Helm charts declare
 
 - **local-path-provisioner** — dynamic PVC provisioning backed by the 3 data disks, mapped to storage classes by node path (see the `local-path-config` patch)
 - **MetalLB** (L2 mode) — LoadBalancer IPs for bare metal, pool defined in `02-configuration`
-- **Gateway API CRDs** (v1.6.1, standard + experimental channel — Traefik needs both, even for features you don't use, or its provider will never sync)
-- **Traefik** — ingress gateway via the Kubernetes Gateway API provider; TLS comes from the cert-manager wildcard cert, Traefik's own ACME resolver is not used. Besides `web`/`websecure` it has an `ssh` EntryPoint (LoadBalancer port `22` → container `2222`) for Forgejo's git-over-SSH, and `experimentalChannel` is enabled so the provider handles `TCPRoute`
+- **Gateway API CRDs** (v1.6.1, **standard channel only**; the bundle already contains `TCPRoute`/`TLSRoute` at `v1`, but not the `v1alpha2` versions Traefik's experimental channel expects, so that channel stays off)
+- **Traefik** — ingress gateway via the Kubernetes Gateway API provider; TLS comes from the cert-manager wildcard cert, Traefik's own ACME resolver is not used. Besides `web`/`websecure` it has an `ssh` EntryPoint (LoadBalancer port `22` → container `2222`) for Forgejo's git-over-SSH, served by an `IngressRouteTCP` through the CRD provider. Keep `providers.kubernetesGateway.experimentalChannel` **off**: Traefik then lists `TCPRoute`/`TLSRoute` at `v1alpha2`, which the standard-channel CRDs do not serve, and the Gateway provider never syncs (default cert and 404 on every host)
 - **sealed-secrets** — encrypts secrets so they're safe to commit to a public git repo
 - **cert-manager** — issues the wildcard TLS cert used by the Gateway
 - **kubelet-serving-cert-approver** — auto-approves kubelet serving-certificate CSRs so kubelets get certs signed by the cluster CA instead of self-signed ones
@@ -159,7 +159,7 @@ Verify with `talosctl ls /dev/dri` (expect `card0` + `renderD128`) and `vainfo` 
 
 - `storage-classes.yaml` — `nvme-2tb`, `sata-8tb`, `sata-1tb` StorageClasses (`WaitForFirstConsumer`, `reclaimPolicy: Retain`, backed by local-path-provisioner). `Retain` means deleting a PVC leaves the PV `Released` and the data on disk; clean up deliberately with `kubectl delete pv <name>` and then remove the directory under `/var/mnt/<class>/`. `reclaimPolicy` is immutable, so the classes carry `Force=true,Replace=true` and ArgoCD deletes and recreates them on change (`Replace=true` alone is still an update and is rejected); existing PVs are unaffected.
 - `metallb-pool.yaml` — `IPAddressPool` + `L2Advertisement` for the LAN
-- `main-gateway.yaml` — the shared `Gateway` (HTTP + HTTPS listeners on `*.<your-domain>`, plus a plain `ssh` TCP listener); listener ports must match Traefik's actual EntryPoint ports (`8000`/`8443`/`2222`), not the externally-exposed Service ports (`80`/`443`/`22`)
+- `main-gateway.yaml` — the shared `Gateway` (HTTP + HTTPS listeners on `*.<your-domain>`); listener ports must match Traefik's actual EntryPoint ports (`8000`/`8443`), not the externally-exposed Service ports (`80`/`443`)
 - `cluster-issuer.yaml` — cert-manager `ClusterIssuer` (ACME + Cloudflare DNS-01) and a wildcard `Certificate`
 - `argocd-route.yaml` — exposes the ArgoCD UI through the Gateway
 
@@ -314,9 +314,9 @@ read-only root filesystem.
 | Git over SSH | `git@git.k8s.noelmiller.dev` (port 22 on the Traefik LoadBalancer IP) |
 
 Both hostnames resolve to Traefik. HTTPS uses an ordinary `HTTPRoute`; SSH
-uses a Gateway API `TCPRoute` bound to the `ssh` TCP listener on
-`main-gateway`, which maps to Traefik's `ssh` EntryPoint. No extra MetalLB
-address or DNS record is needed.
+uses a Traefik `IngressRouteTCP` on the `ssh` EntryPoint (a Gateway API
+`TCPRoute` is not an option with the standard-channel CRDs, see step 3). No
+extra MetalLB address or DNS record is needed.
 
 Sign-in goes through Keycloak (below): the login page offers "Sign in with
 keycloak", a first sign-in creates the Forgejo account automatically, and the
@@ -350,7 +350,7 @@ temporary), then create your user in the `homelab` realm and add it to
 
 ## Networking notes
 
-- The Traefik LoadBalancer IP (`10.42.0.11`) now listens on `22` as well as `80`/`443`. Only Forgejo's `TCPRoute` is attached to that listener; Traefik closes connections that match no route.
+- The Traefik LoadBalancer IP (`10.42.0.11`) now listens on `22` as well as `80`/`443`. Only Forgejo's `IngressRouteTCP` is attached to that EntryPoint; Traefik closes connections that match no route.
 - The cluster's MetalLB pool (`10.42.0.11-10.42.0.48`) is **private/LAN-only** — reachable from your home network, not the public internet. For external access you'd additionally need a public DNS record and port-forwarding/tunnel (e.g. Cloudflare Tunnel) — not currently configured.
 - Point any local DNS override (e.g. a router's custom DNS zone) at the **Gateway/Traefik Service's external IP** (`kubectl -n traefik get svc traefik`), not the node's own IP — they're not the same thing, and only the Service IP has anything actually listening on 80/443.
 - KubeVirt Manager is available at `https://kubevirt.k8s.noelmiller.dev` and is intended only for the trusted LAN. It has broad VM-management permissions and does not enable authentication by default.

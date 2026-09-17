@@ -31,10 +31,11 @@ resources:
     memory: 1Gi
 
 # Both Services stay ClusterIP. HTTPS arrives through the shared Gateway's
-# `websecure` listener and SSH through its `ssh` TCP listener; see
-# forgejo-routes.yaml. The chart's own route templates are left disabled
-# because they omit the defaulted Gateway API fields that Argo CD needs
-# spelled out under ServerSideApply (see 12-coder/coder-route.yaml).
+# `websecure` listener and SSH through Traefik's `ssh` EntryPoint via an
+# IngressRouteTCP; see forgejo-routes.yaml. The chart's own route templates
+# are left disabled: the HTTPRoute one omits the defaulted Gateway API fields
+# that Argo CD needs spelled out under ServerSideApply (see
+# 12-coder/coder-route.yaml), and TCPRoute is not usable here.
 service:
   http:
     type: ClusterIP
@@ -111,8 +112,8 @@ gitea:
     server:
       DOMAIN: git.k8s.noelmiller.dev
       ROOT_URL: https://git.k8s.noelmiller.dev/
-      # SSH clone URLs advertise the Gateway's port 22; the container listens
-      # on 2222 (rootless) and Traefik's `ssh` entrypoint forwards to it.
+      # SSH clone URLs advertise Traefik's port 22; the container listens on
+      # 2222 (rootless) and Traefik's `ssh` EntryPoint forwards to it.
       SSH_DOMAIN: git.k8s.noelmiller.dev
       SSH_PORT: 22
       SSH_LISTEN_PORT: 2222

@@ -25,10 +25,12 @@ helmCharts:
           enabled: false
         kubernetesGateway:
           enabled: true
-          # Traefik only watches TCPRoute (used for Forgejo's git-over-SSH)
-          # with this on. It also expects the TLSRoute CRD to exist, which the
-          # Gateway API v1.6.1 standard bundle above already installs.
-          experimentalChannel: true
+          # Must stay off: Traefik 3.7 lists TCPRoute/TLSRoute at v1alpha2,
+          # which the standard-channel CRDs above do not serve. With it on the
+          # provider never syncs and every route disappears (default cert,
+          # 404 everywhere). TCP routing uses Traefik's own IngressRouteTCP
+          # via the kubernetesCRD provider instead.
+          experimentalChannel: false
       service:
         type: LoadBalancer
       ports:
@@ -42,8 +44,8 @@ helmCharts:
           expose:
             default: true
           exposedPort: 443
-        # Git over SSH for Forgejo, routed by a Gateway API TCPRoute
-        # (13-forgejo/forgejo-routes.yaml) on main-gateway's `ssh` listener.
+        # Git over SSH for Forgejo, routed by an IngressRouteTCP
+        # (13-forgejo/forgejo-routes.yaml) bound to this EntryPoint.
         ssh:
           port: 2222
           expose:
