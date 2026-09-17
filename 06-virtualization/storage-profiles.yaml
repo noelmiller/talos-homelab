@@ -1,0 +1,55 @@
+# CDI creates one StorageProfile per StorageClass and fills in access and
+# volume modes only for provisioners it recognizes. rancher.io/local-path is
+# not one of them, so without these a DataVolume that omits the modes cannot
+# be populated and CDIStorageProfilesIncomplete fires for every class.
+#
+# The objects already exist (owned by the CDI CR); server-side apply only adds
+# `spec`. The CRD is installed by the CDI operator at runtime rather than by
+# cdi-operator.yaml, hence SkipDryRunOnMissingResource for a fresh cluster.
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: StorageProfile
+metadata:
+  name: nvme-2tb
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  claimPropertySets:
+    - accessModes:
+        - ReadWriteOnce
+      volumeMode: Filesystem
+---
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: StorageProfile
+metadata:
+  name: sata-8tb
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  claimPropertySets:
+    - accessModes:
+        - ReadWriteOnce
+      volumeMode: Filesystem
+---
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: StorageProfile
+metadata:
+  name: sata-1tb
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  claimPropertySets:
+    - accessModes:
+        - ReadWriteOnce
+      volumeMode: Filesystem
+---
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: StorageProfile
+metadata:
+  name: local-path
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  claimPropertySets:
+    - accessModes:
+        - ReadWriteOnce
+      volumeMode: Filesystem

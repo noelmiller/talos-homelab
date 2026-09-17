@@ -256,7 +256,7 @@ kubectl create secret generic alertmanager-discord -n monitoring \
 unset DISCORD_WEBHOOK
 ```
 
-The `monitoring` kustomization references this file, so the layer does not build (and ArgoCD makes no changes) until it exists. `Watchdog` and `InfoInhibitor` are routed to a null receiver; everything else, including resolved notifications, goes to Discord. Test delivery by port-forwarding Alertmanager and posting a synthetic alert:
+The `monitoring` kustomization references this file, so the layer does not build (and ArgoCD makes no changes) until it exists. `Watchdog`, `InfoInhibitor`, and CDI's `CDIDefaultStorageClassDegraded` (permanently true on a single node with local-path storage: no ReadWriteMany, no smart clone) are routed to a null receiver; everything else, including resolved notifications, goes to Discord. kube-proxy is not scraped, for the same reason as the other Talos control-plane components: its metrics port only listens on localhost. Test delivery by port-forwarding Alertmanager and posting a synthetic alert:
 
 ```bash
 kubectl -n monitoring port-forward svc/monitoring-kube-prometheus-alertmanager 9093 &
