@@ -23,11 +23,3 @@ spec:
         mode: Terminate
         certificateRefs:
           - name: wildcard-k8s-noelmiller-dev-tls
-    # Plain TCP for git over SSH (Forgejo). Port must match Traefik's `ssh`
-    # EntryPoint (2222), which is exposed on the LoadBalancer as port 22.
-    - name: ssh
-      protocol: TCP
-      port: 2222
-      allowedRoutes:
-        namespaces:
-          from: All

@@ -27,25 +27,23 @@ spec:
           port: 3000
           weight: 1
 ---
-# Git over SSH. Traefik's `ssh` entrypoint (LAN port 22 on the Traefik
-# LoadBalancer IP) is bound to the Gateway's `ssh` TCP listener, so
-# `git@git.k8s.noelmiller.dev` works through the same DNS record as HTTPS.
-apiVersion: gateway.networking.k8s.io/v1
-kind: TCPRoute
+# Git over SSH. Traefik's `ssh` EntryPoint (LAN port 22 on the Traefik
+# LoadBalancer IP, see 01-infrastructure) forwards raw TCP to the Forgejo SSH
+# Service, so `git@git.k8s.noelmiller.dev` works through the same DNS record
+# as HTTPS. This is a Traefik CRD rather than a Gateway API TCPRoute because
+# Traefik only handles TCPRoute with its experimental channel enabled, which
+# breaks the whole Gateway provider against the standard-channel CRDs.
+# SSH has no SNI, so the only possible match is HostSNI(`*`).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRouteTCP
 metadata:
   name: forgejo-ssh
   namespace: forgejo
 spec:
-  parentRefs:
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      name: main-gateway
-      namespace: default
-      sectionName: ssh
-  rules:
-    - backendRefs:
-        - group: ""
-          kind: Service
-          name: forgejo-ssh
+  entryPoints:
+    - ssh
+  routes:
+    - match: HostSNI(`*`)
+      services:
+        - name: forgejo-ssh
           port: 22
-          weight: 1

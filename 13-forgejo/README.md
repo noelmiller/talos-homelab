@@ -12,20 +12,23 @@ registry) with an in-cluster PostgreSQL database. It is reachable at
 - `sealed-forgejo-admin.yaml`: sealed Forgejo administrator credentials (`username`, `password`).
 - `postgresql-values.yaml`: Bitnami PostgreSQL chart values (10Gi on `nvme-2tb`), image pinned to the same PostgreSQL 18 digest Coder runs.
 - `forgejo-values.yaml`: Forgejo chart values: rootless image, restricted-compatible security contexts, 50Gi data volume on `nvme-2tb`, PostgreSQL connection, metrics + ServiceMonitor, and the `app.ini` settings for the domain, SSH port, and registration policy.
-- `forgejo-routes.yaml`: Gateway API `HTTPRoute` (HTTPS) and `TCPRoute` (SSH) attaching to `main-gateway`.
+- `forgejo-routes.yaml`: Gateway API `HTTPRoute` (HTTPS) on `main-gateway`, and a Traefik `IngressRouteTCP` (SSH) on the `ssh` EntryPoint.
 
 ## How traffic reaches Forgejo
 HTTPS is routed exactly like every other app: the `HTTPRoute` attaches to
 `main-gateway`'s `websecure` listener and inherits the wildcard certificate.
 
-SSH is routed through the same Gateway. Traefik has an `ssh` EntryPoint
-(container port `2222`, exposed on the Traefik LoadBalancer as port `22`, see
-`01-infrastructure/kustomization.yaml`) and `main-gateway` has a matching
-`ssh` TCP listener (`02-configuration/main-gateway.yaml`). The `TCPRoute`
-forwards that listener to the `forgejo-ssh` Service, so clone URLs use the
-same DNS name as the web UI with no extra MetalLB address. Traefik's
-`providers.kubernetesGateway.experimentalChannel` must stay enabled: without
-it Traefik ignores `TCPRoute` objects.
+SSH is routed through the same Traefik instance. Traefik has an `ssh`
+EntryPoint (container port `2222`, exposed on the Traefik LoadBalancer as port
+`22`, see `01-infrastructure/kustomization.yaml`) and the `IngressRouteTCP`
+in `forgejo-routes.yaml` forwards it to the `forgejo-ssh` Service, so clone
+URLs use the same DNS name as the web UI with no extra MetalLB address.
+
+This deliberately does not use a Gateway API `TCPRoute`: Traefik 3.7 only
+handles `TCPRoute` with `providers.kubernetesGateway.experimentalChannel`
+enabled, and with the standard-channel Gateway API CRDs installed that
+setting makes the whole Gateway provider fail to sync (every HTTPS route
+vanishes and Traefik serves its default certificate). Leave it off.
 
 Inside the pod the rootless image serves SSH from Forgejo's built-in server on
 `2222`; `SSH_PORT: 22` only controls the port advertised in clone URLs.
