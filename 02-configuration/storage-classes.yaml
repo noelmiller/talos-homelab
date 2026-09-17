@@ -8,6 +8,11 @@ metadata:
     # delete-and-recreate. Existing PVs/PVCs keep working; they reference the
     # class by name.
     argocd.argoproj.io/sync-options: Force=true,Replace=true
+    # Provision `local` PVs instead of local-path's default hostPath. Velero
+    # (15-velero) can only back up volumes the kubelet mounts under its pod
+    # directory, which hostPath PVs bypass. Applies to new volumes only; see
+    # 15-velero/README.md for converting an existing one.
+    defaultVolumeType: local
     storageclass.kubernetes.io/is-default-class: "true"
 provisioner: rancher.io/local-path
 volumeBindingMode: WaitForFirstConsumer
@@ -23,6 +28,11 @@ metadata:
     # delete-and-recreate. Existing PVs/PVCs keep working; they reference the
     # class by name.
     argocd.argoproj.io/sync-options: Force=true,Replace=true
+    # Provision `local` PVs instead of local-path's default hostPath. Velero
+    # (15-velero) can only back up volumes the kubelet mounts under its pod
+    # directory, which hostPath PVs bypass. Applies to new volumes only; see
+    # 15-velero/README.md for converting an existing one.
+    defaultVolumeType: local
 provisioner: rancher.io/local-path
 volumeBindingMode: WaitForFirstConsumer
 reclaimPolicy: Retain
@@ -37,6 +47,11 @@ metadata:
     # delete-and-recreate. Existing PVs/PVCs keep working; they reference the
     # class by name.
     argocd.argoproj.io/sync-options: Force=true,Replace=true
+    # Provision `local` PVs instead of local-path's default hostPath. Velero
+    # (15-velero) can only back up volumes the kubelet mounts under its pod
+    # directory, which hostPath PVs bypass. Applies to new volumes only; see
+    # 15-velero/README.md for converting an existing one.
+    defaultVolumeType: local
 provisioner: rancher.io/local-path
 volumeBindingMode: WaitForFirstConsumer
 reclaimPolicy: Retain
