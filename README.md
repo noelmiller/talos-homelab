@@ -31,7 +31,6 @@ metrics-server-kubelet-patch.yaml Talos KubeletConfig patch enabling serving-cer
 13-forgejo/                       Forgejo git forge with PostgreSQL, HTTPS and SSH through Traefik
 14-keycloak/                      Keycloak single sign-on with PostgreSQL and a git-managed realm
 tests/                            On-demand smoke-test manifests, never applied by ArgoCD
-scripts/                          Maintenance scripts run by hand against the cluster
 .github/workflows/                CI: renders every layer, schema-checks it, validates Terraform
 ```
 
@@ -207,14 +206,7 @@ ArgoCD polls the repo and auto-syncs + self-heals drift. Force an immediate sync
 
 The bootstrap command in step 3 is for a cluster ArgoCD does not manage yet. Run by hand later, it leaves a `kubectl` field manager co-owning every field it touched. `monitoring`, `virtualization`, `coder`, `forgejo`, and `keycloak` sync with `ServerSideApply=true`, where a field is only deleted once its *last* manager drops it: a field removed in git then stays live while the Application still reports `Synced` (this is how a removed node-exporter CPU limit survived a sync). Use `kubectl diff` or `--dry-run=server` to try things out, which record nothing.
 
-If it happened anyway, or after bootstrapping a new cluster, clear the leftovers:
-
-```bash
-scripts/prune-stale-field-managers.sh            # dry run: lists objects and any fields only a stale manager owns
-scripts/prune-stale-field-managers.sh --apply    # relinquish; metadata-only, restarts nothing
-```
-
-Objects where a stale manager is the only owner of a field are skipped and listed, since relinquishing deletes that field; review them, then add `--prune-orphans` to converge them to git. After merging a change that *removes* a field from one of those layers, check the live object rather than trusting `Synced`.
+After merging a change that *removes* a field from one of those layers, check the live object rather than trusting `Synced`. If a stale manager shows up in `kubectl get <kind> <name> --show-managed-fields -o yaml`, make it relinquish by server-side-applying a manifest holding only `apiVersion`, `kind`, `metadata.name`, and `metadata.namespace` with `--field-manager=<stale manager>`; fields that manager alone owned are deleted, everything ArgoCD also owns is untouched.
 
 ## 7. Minecraft
 
