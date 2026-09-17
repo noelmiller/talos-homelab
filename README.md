@@ -336,11 +336,16 @@ the shared Gateway. Pod Security is `restricted`.
 The `homelab` realm is defined in git
 ([14-keycloak/realm-homelab.json](14-keycloak/realm-homelab.json)) and
 applied by a `keycloak-config-cli` Job that runs as an Argo CD **PostSync
-hook** after every sync, so the realm, the `forgejo` OIDC client, the
-`groups` claim, and the `forgejo-admins` group are reproducible. The Job only
-creates and updates; anything added in the admin console is left alone. The
+hook** after every sync, so the realm, the `forgejo` and `coder` OIDC
+clients, the `groups` claim, and the `forgejo-admins` group are reproducible. The Job only
+creates and updates; anything added in the admin console is left alone. Each
 client secret is a `SealedSecret` sealed twice, once for each namespace, and
 substituted into the realm at import time.
+
+Coder offers "Sign in with Keycloak" next to its existing GitHub sign-in; any
+`homelab` realm user with a verified e-mail gets a Coder account on first
+sign-in. See [12-coder/README.md](12-coder/README.md) for moving an existing
+GitHub-based Coder account over.
 
 After the first sync, log in to the admin console with the bootstrap
 credentials from the unsealed `keycloak-admin` Secret, create a permanent

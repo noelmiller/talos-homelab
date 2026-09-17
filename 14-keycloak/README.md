@@ -1,6 +1,6 @@
 # Keycloak
 
-Single sign-on for the cluster, currently used by Forgejo. Keycloak runs from
+Single sign-on for the cluster, currently used by Forgejo and Coder. Keycloak runs from
 the official `quay.io/keycloak/keycloak` image in production mode with an
 in-cluster PostgreSQL database and is reachable at
 `https://auth.k8s.noelmiller.dev`.
@@ -10,6 +10,7 @@ in-cluster PostgreSQL database and is reachable at
 - `sealed-keycloak-postgresql.yaml`: sealed PostgreSQL credentials (`password`, `postgres-password`).
 - `sealed-keycloak-admin.yaml`: sealed bootstrap admin (`username`, `password`), also used by the realm import Job.
 - `sealed-keycloak-forgejo-client.yaml`: sealed OIDC client secret for Forgejo (`client-secret`). The same value is sealed for the `forgejo` namespace in `13-forgejo/sealed-forgejo-keycloak-oauth.yaml`.
+- `sealed-keycloak-coder-client.yaml`: sealed OIDC client secret for Coder (`client-secret`). The same value is sealed for the `coder` namespace in `12-coder/sealed-coder-keycloak-oidc.yaml`.
 - `postgresql-values.yaml`: Bitnami PostgreSQL chart values (10Gi on `nvme-2tb`), image pinned to the same PostgreSQL 18 digest as Coder and Forgejo.
 - `keycloak.yaml`: Deployment (1 replica, `Recreate`), Service (`8080` http, `9000` management), and a ServiceMonitor for `/metrics`.
 - `keycloak-route.yaml`: `HTTPRoute` for `auth.k8s.noelmiller.dev` on `main-gateway`.
@@ -28,12 +29,14 @@ five minutes.
 - realm `homelab`: no self-registration, e-mail login, brute-force protection;
 - group `forgejo-admins`;
 - client scope `groups` with a group-membership mapper (claim `groups`);
-- confidential client `forgejo` with redirect URI `https://git.k8s.noelmiller.dev/user/oauth2/keycloak/callback` and the `groups` scope by default.
+- confidential client `forgejo` with redirect URI `https://git.k8s.noelmiller.dev/user/oauth2/keycloak/callback` and the `groups` scope by default;
+- confidential client `coder` with redirect URI `https://coder.k8s.noelmiller.dev/api/v2/users/oidc/callback` and `offline_access` as an optional scope (Coder requests it to get a long-lived refresh token).
 
 `realm-import-job.yaml` runs [keycloak-config-cli](https://github.com/adorsys/keycloak-config-cli)
 as an Argo CD PostSync hook after every successful sync. The client secret
-placeholder `$(env:FORGEJO_OAUTH_CLIENT_SECRET)` is resolved from the sealed
-Secret at import time, so the secret never appears in git. The Job creates
+placeholders `$(env:FORGEJO_OAUTH_CLIENT_SECRET)` and
+`$(env:CODER_OIDC_CLIENT_SECRET)` are resolved from the sealed Secrets at
+import time, so the secrets never appear in git. The Job creates
 and updates the declared objects but is configured with `no-delete` for
 clients, client scopes, and groups, so anything created by hand in the admin
 console survives. Edit the JSON and push to change the realm; kustomize hashes
@@ -60,6 +63,10 @@ major version. Bump both together when a new CLI release appears.
    Forgejo administrator.
 4. Open `https://git.k8s.noelmiller.dev`, choose **Sign in with keycloak**.
    The Forgejo account is created on first sign-in with the Keycloak username.
+5. For Coder, switch **Email verified** on for the user (Coder refuses
+   unverified addresses), then open `https://coder.k8s.noelmiller.dev` and
+   choose **Sign in with Keycloak**. If you already have a GitHub-based Coder
+   account with the same e-mail, convert it first; see `12-coder/README.md`.
 
 ## Rotating credentials
 Bootstrap admin (only takes effect on an empty database; afterwards change
@@ -91,6 +98,23 @@ kubectl create secret generic forgejo-keycloak-oauth --namespace forgejo \
 unset client_secret
 ```
 
+Coder client secret (same pattern; the next sync updates the Keycloak client
+and the `coder-keycloak-oidc` Secret, but Coder reads it as an environment
+variable, so finish with `kubectl -n coder rollout restart deploy/coder`):
+
+```sh
+client_secret="$(openssl rand -base64 48 | tr -d '=+/\n' | cut -c1-40)"
+kubectl create secret generic keycloak-coder-client --namespace keycloak \
+  --from-literal=client-secret="$client_secret" --dry-run=client -o yaml |
+  kubeseal --format yaml --controller-name sealed-secrets --controller-namespace kube-system \
+  > 14-keycloak/sealed-keycloak-coder-client.yaml
+kubectl create secret generic coder-keycloak-oidc --namespace coder \
+  --from-literal=client-secret="$client_secret" --dry-run=client -o yaml |
+  kubeseal --format yaml --controller-name sealed-secrets --controller-namespace kube-system \
+  > 12-coder/sealed-coder-keycloak-oidc.yaml
+unset client_secret
+```
+
 PostgreSQL: same procedure and caveats as `13-forgejo/README.md`.
 
 ## Coupling with Forgejo
@@ -101,6 +125,12 @@ While Keycloak is down or the realm has not been imported yet, that init
 container fails and Kubernetes retries it; Forgejo comes up on its own once
 Keycloak answers. Expect this on the first deployment and after a full
 cluster restart.
+
+## Coupling with Coder
+Coder fetches the same discovery document once at startup and exits if it
+cannot, so a Coder pod that (re)starts while Keycloak is unavailable
+crash-loops until Keycloak answers. A Coder pod that is already running keeps
+working, and its GitHub sign-in does not depend on Keycloak.
 
 ## Adding another application
 Add a client to `realm-homelab.json` with its redirect URI, seal its secret

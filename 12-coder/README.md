@@ -7,8 +7,9 @@ exposes it at `https://coder.k8s.noelmiller.dev`.
 - `namespace.yaml`: creates the `coder` namespace.
 - `sealed-coder-postgresql.yaml`: sealed credentials for the PostgreSQL instance (`password`, `postgres-password`, `connection-url`).
 - `sealed-coder-github-oauth.yaml`: sealed GitHub OAuth App client secret (`client-secret`).
+- `sealed-coder-keycloak-oidc.yaml`: sealed Keycloak OIDC client secret (`client-secret`). The same value is sealed for the `keycloak` namespace in `14-keycloak/sealed-keycloak-coder-client.yaml`.
 - `postgresql-values.yaml`: Bitnami PostgreSQL chart values (20Gi persistent volume on `nvme-2tb`). The image is pinned by digest because the chart's default tag is the floating `latest`, which would pull a new PostgreSQL major on any pod restart and fail to start on the existing data directory.
-- `coder-values.yaml`: Coder Helm chart values configured for cluster-internal PostgreSQL, GitHub OAuth, and `https://coder.k8s.noelmiller.dev` access URL.
+- `coder-values.yaml`: Coder Helm chart values configured for cluster-internal PostgreSQL, GitHub OAuth, Keycloak OIDC, and `https://coder.k8s.noelmiller.dev` access URL.
 - `coder-route.yaml`: Gateway API `HTTPRoute` attaching `coder.k8s.noelmiller.dev` to `main-gateway`.
 
 ## Rotating PostgreSQL Credentials
@@ -32,7 +33,39 @@ kubectl create secret generic coder-postgresql \
 ```
 
 ## Authentication
-Sign-in uses a dedicated GitHub OAuth App (not the default Coder-managed app,
+The login page offers two providers: **Sign in with Keycloak** (OpenID
+Connect against the `homelab` realm in `14-keycloak`) and GitHub.
+
+### Keycloak
+- **Issuer**: `https://auth.k8s.noelmiller.dev/realms/homelab`, client `coder`, declared in `14-keycloak/realm-homelab.json` with redirect URI `https://coder.k8s.noelmiller.dev/api/v2/users/oidc/callback`.
+- Any user of the `homelab` realm can sign in; the Coder account is created on first sign-in with the Keycloak username and the `member` role. The realm has no self-registration, so that is whoever you created in Keycloak.
+- Coder rejects an `email_verified: false` claim. For users created in the admin console, switch **Email verified** on (Users → the user → Details).
+- The `offline_access` scope gives Coder a refresh token that outlives the Keycloak SSO session, so sessions are not cut off when the access token expires. Revoke one from the user's **Sessions** tab in Keycloak.
+- Coder fetches the OIDC discovery document at startup and exits if that fails, so while Keycloak is down or the realm has not been imported, a *restarting* Coder pod crash-loops until Keycloak answers. A running pod is unaffected, and GitHub sign-in is independent of Keycloak.
+- To rotate the client secret, see "Rotating credentials" in `14-keycloak/README.md`.
+
+A Coder account is bound to one login type. An account that was created
+through GitHub cannot sign in through Keycloak with the same e-mail address
+(`Incorrect login type`), and Coder only offers self-service conversion for
+password accounts. To move an existing GitHub account to Keycloak, switch its
+login type in the database, then sign in with Keycloak using the same e-mail:
+
+```sh
+kubectl -n coder exec -it coder-postgresql-0 -- bash -c \
+  'PGPASSWORD="$(cat "$POSTGRES_PASSWORD_FILE")" psql -U coder coder'
+```
+```sql
+DELETE FROM user_links WHERE user_id = (SELECT id FROM users WHERE email = '<email>');
+UPDATE users SET login_type = 'oidc' WHERE email = '<email>';
+```
+
+Once every account is on Keycloak, GitHub sign-in can be removed by deleting
+the `CODER_OAUTH2_GITHUB_*` variables (keep
+`CODER_OAUTH2_GITHUB_DEFAULT_PROVIDER_ENABLE: "false"`) and
+`sealed-coder-github-oauth.yaml`.
+
+### GitHub
+GitHub sign-in uses a dedicated GitHub OAuth App (not the default Coder-managed app,
 which is explicitly disabled via `CODER_OAUTH2_GITHUB_DEFAULT_PROVIDER_ENABLE: "false"`).
 
 - **Homepage URL / Authorization callback URL**: `https://coder.k8s.noelmiller.dev`

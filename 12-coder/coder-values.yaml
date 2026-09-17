@@ -20,6 +20,28 @@ coder:
           key: client-secret
     - name: CODER_OAUTH2_GITHUB_ALLOWED_ORGS
       value: "henry-miller-frazier"
+    # Keycloak (14-keycloak) as the OpenID Connect provider, alongside GitHub.
+    # The `coder` client lives in 14-keycloak/realm-homelab.json; its secret is
+    # sealed for both namespaces. Coder fetches the discovery document at
+    # startup and exits if it fails, so the pod restarts until Keycloak and
+    # the `homelab` realm answer.
+    - name: CODER_OIDC_ISSUER_URL
+      value: https://auth.k8s.noelmiller.dev/realms/homelab
+    - name: CODER_OIDC_CLIENT_ID
+      value: coder
+    - name: CODER_OIDC_CLIENT_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: coder-keycloak-oidc
+          key: client-secret
+    # offline_access gets a refresh token that outlives the Keycloak SSO
+    # session; without it Coder signs users out when the access token expires.
+    - name: CODER_OIDC_SCOPES
+      value: openid,profile,email,offline_access
+    - name: CODER_OIDC_SIGN_IN_TEXT
+      value: Sign in with Keycloak
+    - name: CODER_OIDC_ICON_URL
+      value: /icon/keycloak.svg
   # Chart default requests 2 CPU / 4Gi; observed 7-day peak is ~320Mi and <50m CPU.
   resources:
     requests:
