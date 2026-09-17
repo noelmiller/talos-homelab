@@ -59,13 +59,31 @@ spec:
                 secretKeyRef:
                   name: keycloak-coder-client
                   key: client-secret
+            # GitHub OAuth App behind the `github` identity provider.
+            - name: GITHUB_IDP_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-github-idp
+                  key: client-id
+            - name: GITHUB_IDP_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-github-idp
+                  key: client-secret
             # Create and update what the realm file declares, but never delete
-            # clients, scopes, or groups that were added in the admin console.
+            # clients, scopes, groups, flows, or identity providers that were
+            # added in the admin console.
             - name: IMPORT_MANAGED_CLIENT
               value: no-delete
             - name: IMPORT_MANAGED_CLIENT_SCOPE
               value: no-delete
             - name: IMPORT_MANAGED_GROUP
+              value: no-delete
+            - name: IMPORT_MANAGED_AUTHENTICATION_FLOW
+              value: no-delete
+            - name: IMPORT_MANAGED_IDENTITY_PROVIDER
+              value: no-delete
+            - name: IMPORT_MANAGED_IDENTITY_PROVIDER_MAPPER
               value: no-delete
           resources:
             requests:

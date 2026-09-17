@@ -9,6 +9,49 @@
   "rememberMe": true,
   "resetPasswordAllowed": true,
   "bruteForceProtected": true,
+  "authenticationFlows": [
+    {
+      "alias": "github link existing",
+      "description": "First GitHub sign-in: only link to a user that already exists, after that user proves their Keycloak password. Never creates users.",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "idp-detect-existing-broker-user",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "idp-username-password-form",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "userSetupAllowed": false
+        }
+      ]
+    }
+  ],
+  "identityProviders": [
+    {
+      "alias": "github",
+      "displayName": "GitHub",
+      "providerId": "github",
+      "enabled": true,
+      "trustEmail": true,
+      "storeToken": false,
+      "linkOnly": false,
+      "firstBrokerLoginFlowAlias": "github link existing",
+      "config": {
+        "clientId": "$(env:GITHUB_IDP_CLIENT_ID)",
+        "clientSecret": "$(env:GITHUB_IDP_CLIENT_SECRET)",
+        "defaultScope": "user:email",
+        "syncMode": "IMPORT"
+      }
+    }
+  ],
   "groups": [
     {
       "name": "forgejo-admins",
