@@ -1,0 +1,77 @@
+{
+  "realm": "homelab",
+  "displayName": "Homelab",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "rememberMe": true,
+  "resetPasswordAllowed": true,
+  "bruteForceProtected": true,
+  "groups": [
+    {
+      "name": "forgejo-admins",
+      "path": "/forgejo-admins"
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "groups",
+      "description": "Group membership as a `groups` claim",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "forgejo",
+      "name": "Forgejo",
+      "description": "Git forge at git.k8s.noelmiller.dev",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "$(env:FORGEJO_OAUTH_CLIENT_SECRET)",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "rootUrl": "https://git.k8s.noelmiller.dev",
+      "baseUrl": "/",
+      "redirectUris": [
+        "https://git.k8s.noelmiller.dev/user/oauth2/keycloak/callback"
+      ],
+      "webOrigins": [
+        "https://git.k8s.noelmiller.dev"
+      ],
+      "defaultClientScopes": [
+        "basic",
+        "acr",
+        "profile",
+        "email",
+        "roles",
+        "web-origins",
+        "groups"
+      ]
+    }
+  ]
+}

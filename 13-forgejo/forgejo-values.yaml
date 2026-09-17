@@ -1,0 +1,145 @@
+# Rootless image (chart default): Forgejo runs as uid 1000 and serves SSH from
+# its built-in Go server on 2222 instead of sshd on 22.
+podSecurityContext:
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# Applied to the init containers and the main container. Everything writable
+# lives on the data PVC or the /tmp emptyDir the chart mounts, so the root
+# filesystem can be read-only. Together with the pod context this satisfies
+# the `restricted` Pod Security level enforced on the namespace.
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  privileged: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "2"
+    memory: 1Gi
+
+# Both Services stay ClusterIP. HTTPS arrives through the shared Gateway's
+# `websecure` listener and SSH through its `ssh` TCP listener; see
+# forgejo-routes.yaml. The chart's own route templates are left disabled
+# because they omit the defaulted Gateway API fields that Argo CD needs
+# spelled out under ServerSideApply (see 12-coder/coder-route.yaml).
+service:
+  http:
+    type: ClusterIP
+    port: 3000
+  ssh:
+    type: ClusterIP
+    port: 22
+httpRoute:
+  enabled: false
+tcpRoute:
+  enabled: false
+ingress:
+  enabled: false
+
+# Repositories, LFS objects, attachments, avatars, indexes, and app.ini.
+# The chart-generated SECRET_KEY / INTERNAL_TOKEN / JWT secrets are written
+# into app.ini on this volume on first start and never regenerated.
+persistence:
+  enabled: true
+  create: true
+  claimName: forgejo-data
+  storageClass: nvme-2tb
+  size: 50Gi
+
+# The helm test Pod would otherwise be rendered by kustomize and applied by
+# Argo CD as a plain resource (busybox:latest, runs as root).
+test:
+  enabled: false
+
+gitea:
+  # Username and password come from the sealed forgejo-admin Secret. The
+  # default `keepUpdated` mode re-applies that password on every pod start, so
+  # git stays the source of truth; change it by resealing, not in the UI.
+  admin:
+    existingSecret: forgejo-admin
+    email: forgejo-admin@noelmiller.dev
+
+  # /metrics on the http port, scraped by kube-prometheus-stack through the
+  # chart's ServiceMonitor (Prometheus selects every ServiceMonitor).
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+
+  # Database password is injected as an environment variable into the
+  # init-app-ini container, where the chart's environment-to-ini step merges
+  # it into [database] alongside the plaintext keys below.
+  additionalConfigFromEnvs:
+    - name: FORGEJO__DATABASE__PASSWD
+      valueFrom:
+        secretKeyRef:
+          name: forgejo-postgresql
+          key: password
+
+  # Keycloak (14-keycloak) as an OpenID Connect sign-in source. The chart's
+  # init container runs `gitea admin auth add-oauth`/`update-oauth` on every
+  # start, reading the client id and secret from the sealed
+  # forgejo-keycloak-oauth Secret (keys `key` and `secret`). Adding the source
+  # fetches the discovery document, so Forgejo will not start while Keycloak
+  # or the `homelab` realm is unavailable; the init container simply retries.
+  # Members of the Keycloak group `forgejo-admins` become Forgejo admins.
+  oauth:
+    - name: keycloak
+      provider: openidConnect
+      existingSecret: forgejo-keycloak-oauth
+      autoDiscoverUrl: https://auth.k8s.noelmiller.dev/realms/homelab/.well-known/openid-configuration
+      scopes: openid profile email groups
+      groupClaimName: groups
+      adminGroup: forgejo-admins
+
+  config:
+    APP_NAME: Forgejo
+    RUN_MODE: prod
+    server:
+      DOMAIN: git.k8s.noelmiller.dev
+      ROOT_URL: https://git.k8s.noelmiller.dev/
+      # SSH clone URLs advertise the Gateway's port 22; the container listens
+      # on 2222 (rootless) and Traefik's `ssh` entrypoint forwards to it.
+      SSH_DOMAIN: git.k8s.noelmiller.dev
+      SSH_PORT: 22
+      SSH_LISTEN_PORT: 2222
+      LFS_START_SERVER: true
+    database:
+      DB_TYPE: postgres
+      HOST: forgejo-postgresql:5432
+      NAME: forgejo
+      USER: forgejo
+      SSL_MODE: disable
+    service:
+      # Accounts are created on first Keycloak sign-in only; the local
+      # registration form stays closed.
+      DISABLE_REGISTRATION: false
+      ALLOW_ONLY_EXTERNAL_REGISTRATION: true
+      SHOW_REGISTRATION_BUTTON: false
+      REQUIRE_SIGNIN_VIEW: false
+    oauth2_client:
+      ENABLE_AUTO_REGISTRATION: true
+      # Username from Keycloak's preferred_username; link to an existing local
+      # account with the same e-mail automatically.
+      USERNAME: nickname
+      ACCOUNT_LINKING: auto
+      UPDATE_AVATAR: true
+    repository:
+      DEFAULT_BRANCH: main
+    webhook:
+      # Default is `external` only, which would block webhooks to in-cluster or
+      # LAN targets such as Argo CD's /api/webhook.
+      ALLOWED_HOST_LIST: external,private

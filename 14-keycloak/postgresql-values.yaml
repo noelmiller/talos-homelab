@@ -1,0 +1,27 @@
+image:
+  # Chart 18.x defaults to the floating `latest` tag, which would silently pull
+  # a new PostgreSQL major on any pod restart and refuse to start on the old
+  # data directory. Pin the same PostgreSQL 18.6.0 digest Coder and Forgejo
+  # run so the node caches one image. Bump deliberately, with a backup.
+  digest: sha256:b69d1fca390fb131639e86e820f248acfc5d911339dc884796f8009260c598d7
+
+auth:
+  username: keycloak
+  database: keycloak
+  existingSecret: keycloak-postgresql
+  secretKeys:
+    adminPasswordKey: postgres-password
+    userPasswordKey: password
+
+primary:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  persistence:
+    enabled: true
+    storageClass: nvme-2tb
+    size: 10Gi

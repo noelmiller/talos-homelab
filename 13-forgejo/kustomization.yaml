@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - sealed-forgejo-postgresql.yaml
+  - sealed-forgejo-admin.yaml
+  - sealed-forgejo-keycloak-oauth.yaml
+  - forgejo-routes.yaml
+
+helmCharts:
+  - name: postgresql
+    repo: https://charts.bitnami.com/bitnami
+    releaseName: forgejo-postgresql
+    namespace: forgejo
+    version: 18.11.3
+    valuesFile: postgresql-values.yaml
+  - name: forgejo
+    repo: oci://code.forgejo.org/forgejo-helm
+    releaseName: forgejo
+    namespace: forgejo
+    version: 17.1.6
+    valuesFile: forgejo-values.yaml
+
+patches:
+  # Never let an Argo CD prune or a cascading Application delete remove a PVC.
+  # Data lives on local disks and is not reproducible from git.
+  - target:
+      kind: PersistentVolumeClaim
+    patch: |-
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: not-used
+        annotations:
+          argocd.argoproj.io/sync-options: Prune=false,Delete=false
