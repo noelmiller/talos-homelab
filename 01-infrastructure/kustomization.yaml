@@ -97,6 +97,30 @@ helmCharts:
         cm:
           # our kustomizations use helmCharts, ArgoCD needs this to build them
           kustomize.buildOptions: "--enable-helm"
+          # Sign in with Keycloak (14-keycloak) over native OIDC. The `argocd`
+          # and `argocd-cli` clients live in 14-keycloak/realm-homelab.json;
+          # the secret is sealed for both namespaces, here as
+          # 02-configuration/sealed-argocd-keycloak-oidc.yaml. `argocd login
+          # --sso` uses the public PKCE client. The local `admin` account
+          # stays enabled as break-glass for when Keycloak is down.
+          oidc.config: |
+            name: Keycloak
+            issuer: https://auth.k8s.noelmiller.dev/realms/homelab
+            clientID: argocd
+            clientSecret: $argocd-keycloak-oidc:client-secret
+            cliClientID: argocd-cli
+            requestedScopes: ["openid", "profile", "email", "groups"]
+        rbac:
+          # Keycloak group `argocd-admins` is admin; every other realm user can
+          # sign in but has no permissions.
+          policy.default: ""
+          scopes: "[groups]"
+          policy.csv: |
+            g, argocd-admins, role:admin
+      # Native OIDC above replaces Dex, which otherwise idles with nothing
+      # listening on its metrics port and trips TargetDown.
+      dex:
+        enabled: false
 
 patches:
   - patch: |-

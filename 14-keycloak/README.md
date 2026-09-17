@@ -1,6 +1,6 @@
 # Keycloak
 
-Single sign-on for the cluster, currently used by Forgejo and Coder. Keycloak runs from
+Single sign-on for the cluster, currently used by Forgejo, Coder, and Argo CD. Keycloak runs from
 the official `quay.io/keycloak/keycloak` image in production mode with an
 in-cluster PostgreSQL database and is reachable at
 `https://auth.k8s.noelmiller.dev`.
@@ -11,6 +11,7 @@ in-cluster PostgreSQL database and is reachable at
 - `sealed-keycloak-admin.yaml`: sealed bootstrap admin (`username`, `password`), also used by the realm import Job.
 - `sealed-keycloak-forgejo-client.yaml`: sealed OIDC client secret for Forgejo (`client-secret`). The same value is sealed for the `forgejo` namespace in `13-forgejo/sealed-forgejo-keycloak-oauth.yaml`.
 - `sealed-keycloak-coder-client.yaml`: sealed OIDC client secret for Coder (`client-secret`). The same value is sealed for the `coder` namespace in `12-coder/sealed-coder-keycloak-oidc.yaml`.
+- `sealed-keycloak-argocd-client.yaml`: sealed OIDC client secret for Argo CD (`client-secret`). The same value is sealed for the `argocd` namespace in `02-configuration/sealed-argocd-keycloak-oidc.yaml`.
 - `sealed-keycloak-github-idp.yaml`: sealed GitHub OAuth App credentials for the `github` identity provider (`client-id`, `client-secret`).
 - `postgresql-values.yaml`: Bitnami PostgreSQL chart values (10Gi on `nvme-2tb`), image pinned to the same PostgreSQL 18 digest as Coder and Forgejo.
 - `keycloak.yaml`: Deployment (1 replica, `Recreate`), Service (`8080` http, `9000` management), and a ServiceMonitor for `/metrics`.
@@ -29,15 +30,16 @@ five minutes.
 `realm-homelab.json` declares:
 - realm `homelab`: no self-registration, e-mail login, brute-force protection;
 - identity provider `github` and its first-login flow `github link existing` (see "Sign in with GitHub" below);
-- group `forgejo-admins`;
+- groups `forgejo-admins` and `argocd-admins`;
 - client scope `groups` with a group-membership mapper (claim `groups`);
 - confidential client `forgejo` with redirect URI `https://git.k8s.noelmiller.dev/user/oauth2/keycloak/callback` and the `groups` scope by default;
-- confidential client `coder` with redirect URI `https://coder.k8s.noelmiller.dev/api/v2/users/oidc/callback` and `offline_access` as an optional scope (Coder requests it to get a long-lived refresh token).
+- confidential client `coder` with redirect URI `https://coder.k8s.noelmiller.dev/api/v2/users/oidc/callback` and `offline_access` as an optional scope (Coder requests it to get a long-lived refresh token);
+- confidential client `argocd` with redirect URI `https://argocd.k8s.noelmiller.dev/auth/callback`, and public PKCE client `argocd-cli` with the loopback redirect `http://localhost:8085/auth/callback` for `argocd login --sso`; both carry the `groups` scope by default.
 
 `realm-import-job.yaml` runs [keycloak-config-cli](https://github.com/adorsys/keycloak-config-cli)
 as an Argo CD PostSync hook after every successful sync. The client secret
 placeholders `$(env:FORGEJO_OAUTH_CLIENT_SECRET)`,
-`$(env:CODER_OIDC_CLIENT_SECRET)`, and `$(env:GITHUB_IDP_CLIENT_ID)` /
+`$(env:CODER_OIDC_CLIENT_SECRET)`, `$(env:ARGOCD_OIDC_CLIENT_SECRET)`, and `$(env:GITHUB_IDP_CLIENT_ID)` /
 `$(env:GITHUB_IDP_CLIENT_SECRET)` are resolved from the sealed Secrets at
 import time, so the secrets never appear in git. The Job creates
 and updates the declared objects but is configured with `no-delete` for
@@ -70,6 +72,14 @@ major version. Bump both together when a new CLI release appears.
    unverified addresses), then open `https://coder.k8s.noelmiller.dev` and
    choose **Sign in with Keycloak**. Keycloak is Coder's only sign-in
    provider; see `12-coder/README.md` for break-glass access.
+6. For Argo CD, add the user to the `argocd-admins` group, then open
+   `https://argocd.k8s.noelmiller.dev` and choose **Log in via Keycloak**, or
+   run `argocd login argocd.k8s.noelmiller.dev --sso --grpc-web`. Group
+   `argocd-admins` maps to `role:admin`
+   (`01-infrastructure/kustomization.yaml`, `configs.rbac`); any other realm
+   user can sign in but sees nothing. The local `admin` account stays enabled
+   as break-glass: `kubectl -n argocd get secret argocd-initial-admin-secret`
+   unless you have changed its password.
 
 ## Sign in with GitHub
 The login page offers a **GitHub** button, which Forgejo and Coder inherit
@@ -146,6 +156,25 @@ kubectl create secret generic coder-keycloak-oidc --namespace coder \
 unset client_secret
 ```
 
+Argo CD client secret (same pattern; the Secret in the `argocd` namespace
+needs the `app.kubernetes.io/part-of: argocd` label or Argo CD will not
+resolve `$argocd-keycloak-oidc:client-secret`; finish with
+`kubectl -n argocd rollout restart deploy/argocd-server`):
+
+```sh
+client_secret="$(openssl rand -base64 48 | tr -d '=+/\n' | cut -c1-40)"
+kubectl create secret generic keycloak-argocd-client --namespace keycloak \
+  --from-literal=client-secret="$client_secret" --dry-run=client -o yaml |
+  kubeseal --format yaml --controller-name sealed-secrets --controller-namespace kube-system \
+  > 14-keycloak/sealed-keycloak-argocd-client.yaml
+kubectl create secret generic argocd-keycloak-oidc --namespace argocd \
+  --from-literal=client-secret="$client_secret" --dry-run=client -o yaml |
+  kubectl label --local -f - app.kubernetes.io/part-of=argocd -o yaml |
+  kubeseal --format yaml --controller-name sealed-secrets --controller-namespace kube-system \
+  > 02-configuration/sealed-argocd-keycloak-oidc.yaml
+unset client_secret
+```
+
 GitHub identity provider (client ID from the OAuth App page, then generate a
 new client secret there; the next sync updates the provider):
 
@@ -183,6 +212,11 @@ crash-loops until Keycloak answers. A Coder pod that is already running keeps
 serving workspaces and existing sessions, but Keycloak is its only sign-in
 provider, so nobody can sign in until Keycloak is back (break-glass procedure
 in `12-coder/README.md`).
+
+## Coupling with Argo CD
+Argo CD fetches the discovery document lazily, on sign-in. While Keycloak is
+down the **Log in via Keycloak** button fails, but syncing is unaffected and
+the local `admin` account still works.
 
 ## Adding another application
 Add a client to `realm-homelab.json` with its redirect URI, seal its secret

@@ -162,6 +162,7 @@ Verify with `talosctl ls /dev/dri` (expect `card0` + `renderD128`) and `vainfo` 
 - `main-gateway.yaml` — the shared `Gateway` (HTTP + HTTPS listeners on `*.<your-domain>`); listener ports must match Traefik's actual EntryPoint ports (`8000`/`8443`), not the externally-exposed Service ports (`80`/`443`)
 - `cluster-issuer.yaml` — cert-manager `ClusterIssuer` (ACME + Cloudflare DNS-01) and a wildcard `Certificate`
 - `argocd-route.yaml` — exposes the ArgoCD UI through the Gateway
+- `sealed-argocd-keycloak-oidc.yaml` — OIDC client secret for ArgoCD's Keycloak sign-in (see [14-keycloak/README.md](14-keycloak/README.md))
 
 Every app's `HTTPRoute` attaches to `main-gateway`'s `websecure` listener and inherits the wildcard cert automatically — no per-app TLS config needed.
 

@@ -56,6 +56,10 @@
     {
       "name": "forgejo-admins",
       "path": "/forgejo-admins"
+    },
+    {
+      "name": "argocd-admins",
+      "path": "/argocd-admins"
     }
   ],
   "clientScopes": [
@@ -147,6 +151,65 @@
       ],
       "optionalClientScopes": [
         "offline_access"
+      ]
+    },
+    {
+      "clientId": "argocd",
+      "name": "Argo CD",
+      "description": "GitOps UI at argocd.k8s.noelmiller.dev",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "$(env:ARGOCD_OIDC_CLIENT_SECRET)",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "rootUrl": "https://argocd.k8s.noelmiller.dev",
+      "baseUrl": "/",
+      "redirectUris": [
+        "https://argocd.k8s.noelmiller.dev/auth/callback"
+      ],
+      "webOrigins": [
+        "https://argocd.k8s.noelmiller.dev"
+      ],
+      "defaultClientScopes": [
+        "basic",
+        "acr",
+        "profile",
+        "email",
+        "roles",
+        "web-origins",
+        "groups"
+      ]
+    },
+    {
+      "clientId": "argocd-cli",
+      "name": "Argo CD CLI",
+      "description": "`argocd login --sso`: public client, PKCE, loopback redirect only",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8085/auth/callback"
+      ],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "acr",
+        "profile",
+        "email",
+        "roles",
+        "web-origins",
+        "groups"
       ]
     }
   ]
