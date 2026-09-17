@@ -61,9 +61,10 @@
         "/^15-velero/velero-values\\.yaml$/"
       ],
       "matchStrings": [
-        "image: (?<depName>velero/velero-plugin-for-[a-z-]+):(?<currentValue>v[\\d.]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+        "image: (?<depName>velero/velero-plugin-for-[a-z-]+):(?<currentValue>v[\\d.]+(?:-rc\\.\\d+)?)@(?<currentDigest>sha256:[a-f0-9]{64})"
       ],
-      "datasourceTemplate": "docker"
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "semver"
     },
     {
       "customType": "regex",

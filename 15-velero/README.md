@@ -10,7 +10,7 @@ S3-compatible API. It is the cluster's only off-node backup.
 - `velero-values.yaml`: chart values: the `velero-plugin-for-aws` object-store plugin, the B2 `BackupStorageLocation`, the node-agent DaemonSet for file-system backup (kopia), the `daily` Schedule, and the ServiceMonitor/PodMonitor.
 - `sealed-velero-b2-credentials.yaml`: sealed B2 application key (key `cloud`, AWS credentials-file format).
 - `sealed-velero-repo-credentials.yaml`: sealed kopia repository password (key `repository-password`) that encrypts volume data before it leaves the node.
-- `volume-policy.yaml`: Velero volume policy that skips the data of any PVC labelled `k8s.noelmiller.dev/backup-volume-data: "false"`; only `media/media-library` carries it.
+- `volume-policy.yaml`: Velero volume policy that skips `emptyDir` volumes and the data of any PVC labelled `k8s.noelmiller.dev/backup-volume-data: "false"`; only `media/media-library` carries it.
 - `backup-alerts.yaml`: `PrometheusRule` for stale or failed backups and for volumes Velero cannot back up.
 
 Both SealedSecrets sync in Argo CD wave `-1`. The Velero server creates
@@ -155,8 +155,23 @@ velero backup describe <name> --details            # lists every pod volume back
 velero backup logs <name> | grep -i hostpath       # volumes that were skipped
 ```
 
-Run a backup by hand right after the first sync: `VeleroBackupStale` fires
-until the schedule has one success.
+A running backup reports little through `velero backup get`. Object counts
+are on the Backup, and each volume is its own `PodVolumeBackup` with byte
+progress, carried out by a short-lived pod next to the node-agent:
+
+```sh
+velero backup describe <name> --details            # items done/total, per-volume status
+kubectl -n velero get backup <name> -o jsonpath='{.status.phase} {.status.progress}{"\n"}'
+kubectl -n velero get podvolumebackups -l velero.io/backup-name=<name> -w \
+  -o custom-columns='NS:.spec.pod.namespace,POD:.spec.pod.name,VOLUME:.spec.volume,PHASE:.status.phase,DONE:.status.progress.bytesDone,TOTAL:.status.progress.totalBytes'
+kubectl -n velero logs deploy/velero -f | grep <name>
+```
+
+Grafana has the longer view: `velero_backup_last_status`,
+`velero_backup_duration_seconds`, and `velero_pod_volume_*` are scraped.
+
+Run a backup by hand right after the first sync rather than waiting for
+04:00 to learn whether Backblaze accepts it.
 
 ## Restoring
 A namespace, into the running cluster (existing objects are left alone, so

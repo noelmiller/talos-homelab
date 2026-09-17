@@ -1,7 +1,12 @@
 initContainers:
   # Backblaze B2 is reached through its S3-compatible API.
+  # A release candidate on purpose: up to v1.14.2 the plugin sends an empty
+  # `x-amz-tagging` header on every upload, which B2 rejects (InvalidArgument),
+  # failing every backup. v1.14.3 fixes that (plugin PR #309) and a second
+  # `checksumAlgorithm: ""` bug (#313). Renovate moves this to the stable
+  # release once it exists.
   - name: velero-plugin-for-aws
-    image: velero/velero-plugin-for-aws:v1.14.2@sha256:0751144c1c8e52d52c48717fbd13ad5a3061e612ae4d7ad744a946cd5b139d1a
+    image: velero/velero-plugin-for-aws:v1.14.3-rc.2@sha256:5b0b46ea3c506bfca2b975b0579705dedc1aecadb69b8bd227581309eb588006
     imagePullPolicy: IfNotPresent
     volumeMounts:
       - mountPath: /target
@@ -73,8 +78,9 @@ schedules:
       includedNamespaces:
         - "*"
       includeClusterResources: true
-      # Skips the data of PVCs labelled k8s.noelmiller.dev/backup-volume-data=false
-      # (the media library). Backups not created from this schedule ignore it.
+      # Skips emptyDir scratch volumes and the data of PVCs labelled
+      # k8s.noelmiller.dev/backup-volume-data=false (the media library).
+      # Backups not created from this schedule ignore it.
       resourcePolicy:
         kind: configmap
         name: velero-volume-policy

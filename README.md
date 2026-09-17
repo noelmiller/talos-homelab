@@ -380,7 +380,7 @@ Velero cannot read hostPath PVs and skips them with only a log warning, so
 volumes provisioned before `defaultVolumeType: local` was set need a one-time
 conversion (one pod restart each). The `VeleroVolumeNotBackupCapable` alert
 names each volume still waiting; `VeleroBackupStale` and
-`VeleroBackupNotSuccessful` cover the backups themselves. See
+`VeleroBackupFailed` cover the backups themselves. See
 [15-velero/README.md](15-velero/README.md) for B2 setup, the conversion, and
 restore procedures including a full rebuild.
 
