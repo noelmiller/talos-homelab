@@ -14,6 +14,17 @@ auth:
     userPasswordKey: password
 
 primary:
+  podAnnotations:
+    # Velero (15-velero) copies this volume while PostgreSQL is writing to it,
+    # which restores like a power cut. Before each backup it runs this in the
+    # container to leave a consistent logical dump next to the data directory,
+    # at /bitnami/postgresql/backup/<database>.sql. A failed dump marks the
+    # backup PartiallyFailed.
+    pre.hook.backup.velero.io/container: postgresql
+    pre.hook.backup.velero.io/timeout: 10m
+    pre.hook.backup.velero.io/on-error: Fail
+    pre.hook.backup.velero.io/command: >-
+      ["/bin/sh", "-c", "set -e; umask 077; d=/bitnami/postgresql/backup; mkdir -p \"$d\"; PGPASSWORD=\"$(cat \"$POSTGRES_PASSWORD_FILE\")\" pg_dump -U \"$POSTGRES_USER\" -d \"$POSTGRES_DATABASE\" --clean --if-exists -f \"$d/$POSTGRES_DATABASE.sql.tmp\"; mv \"$d/$POSTGRES_DATABASE.sql.tmp\" \"$d/$POSTGRES_DATABASE.sql\""]
   resources:
     requests:
       cpu: 100m
