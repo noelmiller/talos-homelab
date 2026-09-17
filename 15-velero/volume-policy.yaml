@@ -4,11 +4,22 @@ metadata:
   name: velero-volume-policy
   namespace: velero
 data:
-  # Referenced by the Schedule in velero-values.yaml. A PVC opts its data out
-  # of backups with this label; the PVC and PV objects are still backed up.
+  # Referenced by the Schedule in velero-values.yaml. The first matching
+  # policy wins.
   policy.yaml: |
     version: v1
     volumePolicies:
+      # defaultVolumesToFsBackup also picks up every emptyDir: tmp, dshm, and
+      # cache directories that a restarted pod recreates, each costing a helper
+      # pod per backup. Those of Talos' static control-plane pods cannot be
+      # located at all and would mark every backup PartiallyFailed.
+      - conditions:
+          volumeTypes:
+            - emptyDir
+        action:
+          type: skip
+      # A PVC opts its data out with this label; the PVC and PV objects are
+      # still backed up.
       - conditions:
           pvcLabels:
             k8s.noelmiller.dev/backup-volume-data: "false"

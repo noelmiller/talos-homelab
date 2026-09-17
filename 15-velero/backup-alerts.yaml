@@ -8,9 +8,7 @@ spec:
     - name: velero-backups
       rules:
         - alert: VeleroBackupStale
-          # 26h: one missed daily run plus slack for a slow upload. Also fires
-          # when a schedule has never produced a successful backup (the
-          # timestamp is 0), which is the state right after install.
+          # 26h: one missed daily run plus slack for a slow upload.
           expr: time() - velero_backup_last_successful_timestamp{schedule!=""} > 93600
           for: 15m
           labels:
@@ -18,14 +16,30 @@ spec:
           annotations:
             summary: "No successful Velero backup for schedule {{ $labels.schedule }} in over 26 hours"
             description: "Check `velero backup get` and the BackupStorageLocation (`velero backup-location get`); Backblaze credentials or connectivity are the usual causes."
-        - alert: VeleroBackupNotSuccessful
-          expr: velero_backup_last_status{schedule!=""} != 1
-          for: 15m
+        - alert: VeleroBackupNeverSucceeded
+          # The timestamp series only appears with the first success, so a
+          # schedule that has never worked needs its own rule.
+          expr: |-
+            velero_backup_success_total{schedule!=""} == 0
+            unless on (schedule) velero_backup_last_successful_timestamp
+          for: 26h
           labels:
             severity: warning
           annotations:
-            summary: "Latest Velero backup for schedule {{ $labels.schedule }} failed or partially failed"
-            description: "Inspect it with `velero backup describe <name> --details` and `velero backup logs <name>`. Clears on the next successful run."
+            summary: "Velero schedule {{ $labels.schedule }} has never produced a successful backup"
+            description: "Check `velero backup get` and `velero backup describe <name> --details`."
+        - alert: VeleroBackupFailed
+          # Counters, not velero_backup_last_status: a backup that fails while
+          # uploading its metadata leaves that gauge at 1.
+          expr: |-
+            increase(velero_backup_failure_total{schedule!=""}[1h]) > 0
+            or increase(velero_backup_partial_failure_total{schedule!=""}[1h]) > 0
+            or increase(velero_backup_validation_failure_total{schedule!=""}[1h]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "A Velero backup for schedule {{ $labels.schedule }} failed or partially failed in the last hour"
+            description: "Inspect it with `velero backup describe <name> --details` and `velero backup logs <name>`; `status.failureReason` on the Backup has the fatal error."
         - alert: VeleroVolumeNotBackupCapable
           # Velero skips volumes on hostPath PVs with nothing but a log
           # warning, so the backup still reports Completed. local-path only
