@@ -65,8 +65,8 @@ major version. Bump both together when a new CLI release appears.
    The Forgejo account is created on first sign-in with the Keycloak username.
 5. For Coder, switch **Email verified** on for the user (Coder refuses
    unverified addresses), then open `https://coder.k8s.noelmiller.dev` and
-   choose **Sign in with Keycloak**. If you already have a GitHub-based Coder
-   account with the same e-mail, convert it first; see `12-coder/README.md`.
+   choose **Sign in with Keycloak**. Keycloak is Coder's only sign-in
+   provider; see `12-coder/README.md` for break-glass access.
 
 ## Rotating credentials
 Bootstrap admin (only takes effect on an empty database; afterwards change
@@ -130,7 +130,9 @@ cluster restart.
 Coder fetches the same discovery document once at startup and exits if it
 cannot, so a Coder pod that (re)starts while Keycloak is unavailable
 crash-loops until Keycloak answers. A Coder pod that is already running keeps
-working, and its GitHub sign-in does not depend on Keycloak.
+serving workspaces and existing sessions, but Keycloak is its only sign-in
+provider, so nobody can sign in until Keycloak is back (break-glass procedure
+in `12-coder/README.md`).
 
 ## Adding another application
 Add a client to `realm-homelab.json` with its redirect URI, seal its secret

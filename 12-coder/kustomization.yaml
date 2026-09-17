@@ -4,7 +4,6 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - sealed-coder-postgresql.yaml
-  - sealed-coder-github-oauth.yaml
   - sealed-coder-keycloak-oidc.yaml
   - coder-route.yaml
 

@@ -342,10 +342,10 @@ creates and updates; anything added in the admin console is left alone. Each
 client secret is a `SealedSecret` sealed twice, once for each namespace, and
 substituted into the realm at import time.
 
-Coder offers "Sign in with Keycloak" next to its existing GitHub sign-in; any
-`homelab` realm user with a verified e-mail gets a Coder account on first
-sign-in. See [12-coder/README.md](12-coder/README.md) for moving an existing
-GitHub-based Coder account over.
+Coder signs in through Keycloak only; any `homelab` realm user with a
+verified e-mail gets a Coder account on first sign-in. See
+[12-coder/README.md](12-coder/README.md) for break-glass access when Keycloak
+is down.
 
 After the first sync, log in to the admin console with the bootstrap
 credentials from the unsealed `keycloak-admin` Secret, create a permanent
