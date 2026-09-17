@@ -13,6 +13,17 @@ spec:
     metadata:
       labels:
         app: ombi-mysql
+      annotations:
+        # Velero (15-velero) copies this volume while MySQL is writing to it.
+        # Before each backup it runs this to leave a consistent dump in the
+        # volume, at /var/lib/mysql/ombi-dump.sql (a plain file in the data
+        # directory, which MySQL ignores). A failed dump marks the backup
+        # PartiallyFailed.
+        pre.hook.backup.velero.io/container: mysql
+        pre.hook.backup.velero.io/timeout: 10m
+        pre.hook.backup.velero.io/on-error: Fail
+        pre.hook.backup.velero.io/command: >-
+          ["/bin/sh", "-c", "set -e; umask 077; f=/var/lib/mysql/ombi-dump.sql; MYSQL_PWD=\"$MYSQL_PASSWORD\" mysqldump -u\"$MYSQL_USER\" --single-transaction --no-tablespaces \"$MYSQL_DATABASE\" > \"$f.tmp\"; mv \"$f.tmp\" \"$f\""]
     spec:
       containers:
         - name: mysql

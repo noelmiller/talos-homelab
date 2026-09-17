@@ -372,7 +372,9 @@ Kubernetes objects and the contents of all pod volumes, except the
 `media-library` volume (~6.5 TiB of re-downloadable media, opted out by a PVC
 label), to a Backblaze B2 bucket over B2's S3-compatible API, and keeps 30
 days. Volume data is deduplicated and encrypted on the node by kopia before
-upload. The B2 application key and the kopia repository password are
+upload. Pre-backup hooks first dump the PostgreSQL and MySQL databases into
+their own volumes, so each backup holds a consistent copy as well as the
+live files. The B2 application key and the kopia repository password are
 `SealedSecret`s; **copies of both belong in a password manager**, because the
 sealed ones die with the cluster.
 
@@ -382,7 +384,8 @@ conversion (one pod restart each). The `VeleroVolumeNotBackupCapable` alert
 names each volume still waiting; `VeleroBackupStale` and
 `VeleroBackupFailed` cover the backups themselves. See
 [15-velero/README.md](15-velero/README.md) for B2 setup, the conversion, and
-restore procedures including a full rebuild.
+restore procedures: one application, one media app, a non-destructive
+rehearsal, and a full rebuild.
 
 ## Networking notes
 

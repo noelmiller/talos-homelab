@@ -41,12 +41,33 @@ Not backed up:
 - any volume still on a **hostPath PV** (see below). Velero skips these with
   only a log warning and still reports the backup `Completed`.
 
+## Consistent copies inside the volumes
 File-system backup copies files while the application is running, so a
-restored PostgreSQL or MongoDB data directory is crash-consistent at best.
-The databases normally recover through their write-ahead logs, but this is
-not a substitute for a logical dump; Velero
-[backup hooks](https://velero.io/docs/main/backup-hooks/) running `pg_dump`
-into the volume are the usual fix.
+restored database directory is what a power cut would have left. Each
+database therefore also gets a consistent copy *inside* a backed-up volume:
+
+| Data | Consistent copy | Made by |
+|---|---|---|
+| Coder, Forgejo, Keycloak PostgreSQL | `/bitnami/postgresql/backup/<database>.sql` | Velero pre-backup hook (`pg_dump`), pod annotations in each `postgresql-values.yaml` |
+| Ombi MySQL | `/var/lib/mysql/ombi-dump.sql` | Velero pre-backup hook (`mysqldump`), annotations in `03-media/ombi-mysql.yaml` |
+| Minecraft worlds | `minecraft-backups`, `minecraft-creative-backups` volumes | the `mc-backup` sidecar, every 12 hours |
+| Palworld | `/palworld/backups` inside `palworld-data` | the server's built-in daily backup |
+| Sonarr, Radarr, Prowlarr | `/config/Backups/scheduled` | each app's weekly scheduled backup |
+| UniFi | `/var/lib/unifi/backup/autobackup/*.unf` | **Off by default.** Enable it under Settings > System > Backups in the UniFi Network UI; the image has no `mongodump`, so there is no hook |
+
+The hooks run with `on-error: Fail`: a dump that fails marks the backup
+`PartiallyFailed`, which `VeleroBackupFailed` reports. A restored database
+normally just starts, replaying its write-ahead log; the dump is for when it
+does not:
+
+```sh
+# PostgreSQL (Forgejo shown; stop the application first)
+kubectl -n forgejo exec -it forgejo-postgresql-0 -c postgresql -- sh -c \
+  'PGPASSWORD="$(cat "$POSTGRES_PASSWORD_FILE")" psql -U "$POSTGRES_USER" -d "$POSTGRES_DATABASE" -f /bitnami/postgresql/backup/$POSTGRES_DATABASE.sql'
+# MySQL
+kubectl -n media exec -it ombi-mysql-0 -- sh -c \
+  'MYSQL_PWD="$MYSQL_PASSWORD" mysql -u"$MYSQL_USER" "$MYSQL_DATABASE" < /var/lib/mysql/ombi-dump.sql'
+```
 
 ## hostPath volumes must be converted
 Velero reads volume data from the kubelet's per-pod directory
@@ -174,16 +195,71 @@ Run a backup by hand right after the first sync rather than waiting for
 04:00 to learn whether Backblaze accepts it.
 
 ## Restoring
-A namespace, into the running cluster (existing objects are left alone, so
-delete what should be replaced first; with `Retain`, also remove the old PV
-and its directory if the volume should come back from the backup):
+Two things decide how every restore goes:
 
+- **Velero never overwrites.** An object that already exists is skipped, and
+  so is its volume data. Whatever should come back from the backup has to be
+  deleted first.
+- **Argo CD recreates what you delete** within seconds, with an empty
+  volume, and Velero then skips it. Stop the controller for the duration.
+  Disabling auto-sync on one Application does not last: `root` self-heals it.
+
+Volume data comes back through a new volume. Velero restores the PVC without
+its old binding, local-path provisions a fresh PV, and an init container
+Velero adds to the pod holds the application back until the data has been
+downloaded and decrypted. With `reclaimPolicy: Retain` the previous directory
+stays on disk under `/var/mnt/<class>/` until you remove it.
+
+### One application
 ```sh
-velero restore create --from-backup <name> --include-namespaces forgejo
+kubectl -n argocd scale statefulset argocd-application-controller --replicas=0
+
+kubectl delete namespace forgejo
+velero restore create --from-backup <backup> --include-namespaces forgejo
+
+velero restore describe <restore> --details        # phase, warnings, per-volume status
+kubectl -n velero get podvolumerestores \
+  -o custom-columns='POD:.spec.pod.name,VOLUME:.spec.volume,PHASE:.status.phase,DONE:.status.progress.bytesDone,TOTAL:.status.progress.totalBytes'
+
+# check the application, then:
+kubectl -n argocd scale statefulset argocd-application-controller --replicas=1
 ```
 
-After losing the cluster:
+Argo CD then reconciles whatever differs from git. Afterwards delete the old
+`Released` PV (`kubectl get pv | grep Released`) and its directory.
 
+### One application in `media`
+Do not delete the `media` namespace: `media-library` is not in any backup,
+and a restored PVC would bind a new, empty volume while 6.5 TiB sit orphaned
+on disk. Delete only what should be replaced, the workload and its own PVC,
+and restore the namespace; everything still present is skipped.
+
+```sh
+kubectl -n argocd scale statefulset argocd-application-controller --replicas=0
+kubectl -n media delete deployment sonarr
+kubectl -n media delete pvc sonarr-config
+velero restore create --from-backup <backup> --include-namespaces media
+```
+
+The Deployment has to go too: left in place, its ReplicaSet starts a pod on
+the empty volume before Velero can restore one with the data.
+
+### Looking inside a backup
+Velero cannot restore a single file. Restore the volume under another
+namespace name, which touches nothing live and needs no Argo CD pause, and
+copy out what you need. This is also the way to rehearse a restore.
+
+```sh
+velero restore create --from-backup <backup> --include-namespaces forgejo \
+  --namespace-mappings forgejo:forgejo-restore-test \
+  --exclude-resources httproutes.gateway.networking.k8s.io,ingressroutetcps.traefik.io,services
+kubectl delete namespace forgejo-restore-test      # when done, then its Released PVs
+```
+
+The exclusions keep the copy from claiming the live application's hostnames
+and LoadBalancer addresses.
+
+### After losing the cluster
 1. Rebuild the node and bootstrap `01-infrastructure` (README steps 1 to 3),
    but do not apply `04-gitops/root-app.yaml` yet.
 2. Install Velero by hand from this directory, with plain Secrets made from
