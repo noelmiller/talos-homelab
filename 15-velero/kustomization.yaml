@@ -1,0 +1,34 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - sealed-velero-b2-credentials.yaml
+  - sealed-velero-repo-credentials.yaml
+  - volume-policy.yaml
+  - backup-alerts.yaml
+
+helmCharts:
+  - name: velero
+    repo: https://vmware-tanzu.github.io/helm-charts
+    releaseName: velero
+    namespace: velero
+    version: 12.2.0
+    includeCRDs: true
+    valuesFile: velero-values.yaml
+
+patches:
+  # Both Secrets must exist before the Velero server starts. The server
+  # creates `velero-repo-credentials` with a well-known default password when
+  # it is missing, and sealed-secrets refuses to overwrite a Secret it does
+  # not own, so losing that race would leave the repository on the default
+  # password. Argo CD waits for wave -1 to be healthy (unsealed) first.
+  - target:
+      kind: SealedSecret
+    patch: |-
+      apiVersion: bitnami.com/v1alpha1
+      kind: SealedSecret
+      metadata:
+        name: not-used
+        annotations:
+          argocd.argoproj.io/sync-wave: "-1"

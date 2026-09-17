@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: velero-volume-policy
+  namespace: velero
+data:
+  # Referenced by the Schedule in velero-values.yaml. A PVC opts its data out
+  # of backups with this label; the PVC and PV objects are still backed up.
+  policy.yaml: |
+    version: v1
+    volumePolicies:
+      - conditions:
+          pvcLabels:
+            k8s.noelmiller.dev/backup-volume-data: "false"
+        action:
+          type: skip
