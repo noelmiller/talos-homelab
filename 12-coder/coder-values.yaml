@@ -7,20 +7,11 @@ coder:
           key: connection-url
     - name: CODER_ACCESS_URL
       value: https://coder.k8s.noelmiller.dev
+    # No GitHub sign-in. Coder otherwise enables its built-in GitHub OAuth app
+    # on deployments without one, which would let any GitHub user sign up.
     - name: CODER_OAUTH2_GITHUB_DEFAULT_PROVIDER_ENABLE
       value: "false"
-    - name: CODER_OAUTH2_GITHUB_ALLOW_SIGNUPS
-      value: "true"
-    - name: CODER_OAUTH2_GITHUB_CLIENT_ID
-      value: "Ov23li6vhWfO9NVP5Btc"
-    - name: CODER_OAUTH2_GITHUB_CLIENT_SECRET
-      valueFrom:
-        secretKeyRef:
-          name: coder-github-oauth
-          key: client-secret
-    - name: CODER_OAUTH2_GITHUB_ALLOWED_ORGS
-      value: "henry-miller-frazier"
-    # Keycloak (14-keycloak) as the OpenID Connect provider, alongside GitHub.
+    # Keycloak (14-keycloak) is the only sign-in provider (OpenID Connect).
     # The `coder` client lives in 14-keycloak/realm-homelab.json; its secret is
     # sealed for both namespaces. Coder fetches the discovery document at
     # startup and exits if it fails, so the pod restarts until Keycloak and
