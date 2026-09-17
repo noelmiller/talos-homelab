@@ -56,6 +56,17 @@
     },
     {
       "customType": "regex",
+      "description": "Velero object-store plugin, an init container image inside the chart values, pinned by tag and digest",
+      "managerFilePatterns": [
+        "/^15-velero/velero-values\\.yaml$/"
+      ],
+      "matchStrings": [
+        "image: (?<depName>velero/velero-plugin-for-[a-z-]+):(?<currentValue>v[\\d.]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
       "description": "Geyser and Floodgate Paper plugins pinned by version and build",
       "managerFilePatterns": [
         "/^07-minecraft/common\\.env$/"

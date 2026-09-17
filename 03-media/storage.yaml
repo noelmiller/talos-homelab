@@ -5,6 +5,10 @@ kind: PersistentVolumeClaim
 metadata:
   name: media-library
   namespace: media
+  labels:
+    # Velero (15-velero/volume-policy.yaml) skips the data of volumes carrying
+    # this label: ~6.5 TiB of re-downloadable media is not worth uploading.
+    k8s.noelmiller.dev/backup-volume-data: "false"
 spec:
   accessModes:
     - ReadWriteOnce

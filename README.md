@@ -30,6 +30,7 @@ metrics-server-kubelet-patch.yaml Talos KubeletConfig patch enabling serving-cer
 12-coder/                         Coder remote development environments with PostgreSQL
 13-forgejo/                       Forgejo git forge with PostgreSQL, HTTPS and SSH through Traefik
 14-keycloak/                      Keycloak single sign-on with PostgreSQL and a git-managed realm
+15-velero/                        Velero backups of cluster objects and volume data to Backblaze B2
 tests/                            On-demand smoke-test manifests, never applied by ArgoCD
 .github/workflows/                CI: renders every layer, schema-checks it, validates Terraform
 ```
@@ -157,7 +158,7 @@ Verify with `talosctl ls /dev/dri` (expect `card0` + `renderD128`) and `vainfo` 
 
 ## 4. Cluster-wide configuration (`02-configuration`)
 
-- `storage-classes.yaml` — `nvme-2tb`, `sata-8tb`, `sata-1tb` StorageClasses (`WaitForFirstConsumer`, `reclaimPolicy: Retain`, backed by local-path-provisioner). `Retain` means deleting a PVC leaves the PV `Released` and the data on disk; clean up deliberately with `kubectl delete pv <name>` and then remove the directory under `/var/mnt/<class>/`. `reclaimPolicy` is immutable, so the classes carry `Force=true,Replace=true` and ArgoCD deletes and recreates them on change (`Replace=true` alone is still an update and is rejected); existing PVs are unaffected.
+- `storage-classes.yaml` — `nvme-2tb`, `sata-8tb`, `sata-1tb` StorageClasses (`WaitForFirstConsumer`, `reclaimPolicy: Retain`, backed by local-path-provisioner). `defaultVolumeType: local` makes the provisioner create `local` PVs rather than its default hostPath ones, which Velero cannot back up (step 13). `Retain` means deleting a PVC leaves the PV `Released` and the data on disk; clean up deliberately with `kubectl delete pv <name>` and then remove the directory under `/var/mnt/<class>/`. `reclaimPolicy` is immutable, so the classes carry `Force=true,Replace=true` and ArgoCD deletes and recreates them on change (`Replace=true` alone is still an update and is rejected); existing PVs are unaffected.
 - `metallb-pool.yaml` — `IPAddressPool` + `L2Advertisement` for the LAN
 - `main-gateway.yaml` — the shared `Gateway` (HTTP + HTTPS listeners on `*.<your-domain>`); listener ports must match Traefik's actual EntryPoint ports (`8000`/`8443`), not the externally-exposed Service ports (`80`/`443`)
 - `cluster-issuer.yaml` — cert-manager `ClusterIssuer` (ACME + Cloudflare DNS-01) and a wildcard `Certificate`
@@ -192,7 +193,7 @@ Once ArgoCD is running (from step 3), bootstrap the app-of-apps pattern **once**
 kubectl apply -f 04-gitops/root-app.yaml
 ```
 
-This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, `virtualization`, `minecraft`, `monitoring`, `palworld`, `unifi`, `coder`, `forgejo`, and `keycloak`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
+This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, `virtualization`, `minecraft`, `monitoring`, `palworld`, `unifi`, `coder`, `forgejo`, `keycloak`, and `velero`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
 
 From here on, the workflow is just:
 
@@ -204,7 +205,7 @@ ArgoCD polls the repo and auto-syncs + self-heals drift. Force an immediate sync
 
 ### Do not `kubectl apply --server-side` over ArgoCD-managed layers
 
-The bootstrap command in step 3 is for a cluster ArgoCD does not manage yet. Run by hand later, it leaves a `kubectl` field manager co-owning every field it touched. `monitoring`, `virtualization`, `coder`, `forgejo`, and `keycloak` sync with `ServerSideApply=true`, where a field is only deleted once its *last* manager drops it: a field removed in git then stays live while the Application still reports `Synced` (this is how a removed node-exporter CPU limit survived a sync). Use `kubectl diff` or `--dry-run=server` to try things out, which record nothing.
+The bootstrap command in step 3 is for a cluster ArgoCD does not manage yet. Run by hand later, it leaves a `kubectl` field manager co-owning every field it touched. `monitoring`, `virtualization`, `coder`, `forgejo`, `keycloak`, and `velero` sync with `ServerSideApply=true`, where a field is only deleted once its *last* manager drops it: a field removed in git then stays live while the Application still reports `Synced` (this is how a removed node-exporter CPU limit survived a sync). Use `kubectl diff` or `--dry-run=server` to try things out, which record nothing.
 
 After merging a change that *removes* a field from one of those layers, check the live object rather than trusting `Synced`. If a stale manager shows up in `kubectl get <kind> <name> --show-managed-fields -o yaml`, make it relinquish by server-side-applying a manifest holding only `apiVersion`, `kind`, `metadata.name`, and `metadata.namespace` with `--field-manager=<stale manager>`; fields that manager alone owned are deleted, everything ArgoCD also owns is untouched.
 
@@ -363,6 +364,26 @@ administrator in the `master` realm (Keycloak treats the bootstrap admin as
 temporary), then create your user in the `homelab` realm and add it to
 `forgejo-admins`. See [14-keycloak/README.md](14-keycloak/README.md).
 
+## 13. Velero backups
+
+The `velero` namespace runs [Velero](https://velero.io/) with the
+node-agent for file-system backup. Every day at 04:00 Central it backs up all
+Kubernetes objects and the contents of all pod volumes, except the
+`media-library` volume (~6.5 TiB of re-downloadable media, opted out by a PVC
+label), to a Backblaze B2 bucket over B2's S3-compatible API, and keeps 30
+days. Volume data is deduplicated and encrypted on the node by kopia before
+upload. The B2 application key and the kopia repository password are
+`SealedSecret`s; **copies of both belong in a password manager**, because the
+sealed ones die with the cluster.
+
+Velero cannot read hostPath PVs and skips them with only a log warning, so
+volumes provisioned before `defaultVolumeType: local` was set need a one-time
+conversion (one pod restart each). The `VeleroVolumeNotBackupCapable` alert
+names each volume still waiting; `VeleroBackupStale` and
+`VeleroBackupNotSuccessful` cover the backups themselves. See
+[15-velero/README.md](15-velero/README.md) for B2 setup, the conversion, and
+restore procedures including a full rebuild.
+
 ## Networking notes
 
 - The Traefik LoadBalancer IP (`10.42.0.11`) now listens on `22` as well as `80`/`443`. Only Forgejo's `IngressRouteTCP` is attached to that EntryPoint; Traefik closes connections that match no route.
@@ -392,7 +413,7 @@ temporary), then create your user in the `homelab` realm and add it to
   kubectl get pv -o custom-columns='PV:.metadata.name,CLAIM:.spec.claimRef.name,RECLAIM:.spec.persistentVolumeReclaimPolicy'
   ```
 - PVCs created by operators or StatefulSet `volumeClaimTemplates` (Prometheus, Alertmanager, and the Coder, Forgejo, and Keycloak PostgreSQL instances) are not ArgoCD-tracked and are never pruned, but are still only protected on disk by the PV reclaim policy above.
-- This is a single node with no off-node backups yet. Minecraft and Palworld backups live on the same machine as the data they protect.
+- Velero (step 13) is the only off-node backup, and it skips the contents of `media-library`: the media files themselves exist only on this machine. Minecraft and Palworld's own backups also live on the same machine as the data they protect, but their volumes are in the Velero backup.
 
 ## Security notes
 

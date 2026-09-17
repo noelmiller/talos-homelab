@@ -1,0 +1,90 @@
+initContainers:
+  # Backblaze B2 is reached through its S3-compatible API.
+  - name: velero-plugin-for-aws
+    image: velero/velero-plugin-for-aws:v1.14.2@sha256:0751144c1c8e52d52c48717fbd13ad5a3061e612ae4d7ad744a946cd5b139d1a
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 1Gi
+
+# kustomize renders the chart's CRDs (includeCRDs) and Argo CD applies them;
+# the chart's Helm-hook upgrade Job would only duplicate that.
+upgradeCRDs: false
+
+credentials:
+  useSecret: true
+  # Key `cloud`, in AWS credentials-file format. See README.md.
+  existingSecret: velero-b2-credentials
+
+# local-path volumes have no snapshot API; volume data goes through the
+# node-agent (kopia file-system backup) instead.
+snapshotsEnabled: false
+deployNodeAgent: true
+
+configuration:
+  backupStorageLocation:
+    - name: default
+      provider: aws
+      bucket: noelmiller-Backup
+      # Everything Velero writes stays under this prefix, so the bucket can
+      # hold other backups and a B2 lifecycle rule can target it.
+      prefix: talos-homelab
+      default: true
+      config:
+        region: us-east-005
+        s3Url: https://s3.us-east-005.backblazeb2.com
+        # The bucket name has an upper-case letter, which is not a valid
+        # virtual-host DNS label.
+        s3ForcePathStyle: "true"
+        # B2 rejects the AWS SDK's default CRC32 checksum header with
+        # XAmzContentSHA256Mismatch.
+        checksumAlgorithm: ""
+  # Back up every pod volume without per-pod opt-in annotations. Volumes on
+  # hostPath PVs are skipped with only a log warning; see README.md and the
+  # VeleroVolumeNotBackupCapable alert.
+  defaultVolumesToFsBackup: true
+  defaultBackupTTL: 720h
+
+nodeAgent:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+schedules:
+  daily:
+    # 04:00 Central. Velero parses this with robfig/cron, which honours CRON_TZ.
+    schedule: "CRON_TZ=America/Chicago 0 4 * * *"
+    # Backups must outlive the Schedule object: Argo CD recreating it would
+    # otherwise garbage-collect every backup it owns.
+    useOwnerReferencesInBackup: false
+    template:
+      ttl: 720h
+      storageLocation: default
+      includedNamespaces:
+        - "*"
+      includeClusterResources: true
+      # Skips the data of PVCs labelled k8s.noelmiller.dev/backup-volume-data=false
+      # (the media library). Backups not created from this schedule ignore it.
+      resourcePolicy:
+        kind: configmap
+        name: velero-volume-policy
+
+metrics:
+  serviceMonitor:
+    # autodetect looks the ServiceMonitor API up in the cluster, which
+    # `kustomize build --enable-helm` cannot do.
+    autodetect: false
+    enabled: true
+  nodeAgentPodMonitor:
+    autodetect: false
+    enabled: true

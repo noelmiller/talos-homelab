@@ -1,0 +1,48 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: velero-backups
+  namespace: velero
+spec:
+  groups:
+    - name: velero-backups
+      rules:
+        - alert: VeleroBackupStale
+          # 26h: one missed daily run plus slack for a slow upload. Also fires
+          # when a schedule has never produced a successful backup (the
+          # timestamp is 0), which is the state right after install.
+          expr: time() - velero_backup_last_successful_timestamp{schedule!=""} > 93600
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "No successful Velero backup for schedule {{ $labels.schedule }} in over 26 hours"
+            description: "Check `velero backup get` and the BackupStorageLocation (`velero backup-location get`); Backblaze credentials or connectivity are the usual causes."
+        - alert: VeleroBackupNotSuccessful
+          expr: velero_backup_last_status{schedule!=""} != 1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Latest Velero backup for schedule {{ $labels.schedule }} failed or partially failed"
+            description: "Inspect it with `velero backup describe <name> --details` and `velero backup logs <name>`. Clears on the next successful run."
+        - alert: VeleroVolumeNotBackupCapable
+          # Velero skips volumes on hostPath PVs with nothing but a log
+          # warning, so the backup still reports Completed. local-path only
+          # provisions `local` PVs since the StorageClasses gained
+          # defaultVolumeType; older volumes need the conversion in README.md.
+          # media-library is excluded on purpose (volume-policy.yaml).
+          expr: |-
+            (
+              kube_persistentvolume_info{host_path!=""}
+                * on (persistentvolume) group_left (claim_namespace, name)
+              kube_persistentvolume_claim_ref
+            )
+            unless on (claim_namespace, name)
+              kube_persistentvolume_claim_ref{claim_namespace="media", name="media-library"}
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Volume {{ $labels.claim_namespace }}/{{ $labels.name }} is on a hostPath PV and is not in any Velero backup"
+            description: "Its manifests are backed up but its data is not. Convert {{ $labels.persistentvolume }} to a `local` PV (15-velero/README.md)."
