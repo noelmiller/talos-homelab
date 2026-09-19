@@ -12,11 +12,11 @@ helmCharts:
     repo: https://charts.bitnami.com/bitnami
     releaseName: coder-postgresql
     namespace: coder
-    version: 18.11.3
+    version: 18.11.4
     valuesFile: postgresql-values.yaml
   - name: coder
     repo: https://helm.coder.com/v2
     releaseName: coder
     namespace: coder
-    version: 2.37.1
+    version: 2.37.2
     valuesFile: coder-values.yaml

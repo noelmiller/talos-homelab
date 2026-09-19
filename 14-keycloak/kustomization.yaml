@@ -25,7 +25,7 @@ helmCharts:
     repo: https://charts.bitnami.com/bitnami
     releaseName: keycloak-postgresql
     namespace: keycloak
-    version: 18.11.3
+    version: 18.11.4
     valuesFile: postgresql-values.yaml
 
 patches:
