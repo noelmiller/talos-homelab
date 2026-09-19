@@ -1,6 +1,6 @@
 {
   "id": "DiscordTasks0001",
-  "name": "Discord tasks command",
+  "name": "Discord task commands",
   "nodes": [
     {
       "parameters": {
@@ -11,7 +11,7 @@
           "rawBody": true
         }
       },
-      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a01",
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0001",
       "name": "Discord interaction",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -23,14 +23,103 @@
     },
     {
       "parameters": {
-        "jsCode": "const crypto = require('crypto');\n\nconst reply = (status, body, command) => [{ json: { status, body, command } }];\n// Ephemeral: only the person who ran the command sees it.\nconst say = (content) => reply(200, { type: 4, data: { content, flags: 64 } });\n\n// Discord signs timestamp + raw body with the application's Ed25519 key, and\n// probes the endpoint with bad signatures, which must get a 401.\nconst raw = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst headers = $input.first().json.headers;\nconst signature = headers['x-signature-ed25519'] ?? '';\nconst timestamp = headers['x-signature-timestamp'] ?? '';\nconst publicKey = $env.DISCORD_PUBLIC_KEY;\nif (!publicKey) throw new Error('DISCORD_PUBLIC_KEY is not set');\n\nlet valid = false;\ntry {\n  // A raw 32-byte Ed25519 key behind the fixed SPKI prefix.\n  const key = crypto.createPublicKey({\n    key: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), Buffer.from(publicKey, 'hex')]),\n    format: 'der',\n    type: 'spki',\n  });\n  valid = /^[0-9a-f]{128}$/i.test(signature)\n    && Math.abs(Date.now() / 1000 - Number(timestamp)) < 300\n    && crypto.verify(null, Buffer.concat([Buffer.from(timestamp), raw]), key, Buffer.from(signature, 'hex'));\n} catch (e) {\n  valid = false;\n}\nif (!valid) return reply(401, { error: 'invalid request signature' });\n\nconst interaction = JSON.parse(raw.toString('utf8'));\nif (interaction.type === 1) return reply(200, { type: 1 }); // PING\n\nif ($env.DISCORD_GUILD_ID && interaction.guild_id !== $env.DISCORD_GUILD_ID) return say('This command is not available here.');\nif (interaction.type !== 2 || interaction.data?.name !== 'tasks') return say('Unknown command.');\n\n// Type 5 shows \"thinking...\" at once; the list follows as an edit of that\n// message, which lifts Discord's three-second limit on the reply.\nreturn reply(200, { type: 5 }, {\n  project: (interaction.data.options?.find((o) => o.name === 'project')?.value ?? '').trim(),\n  channel_id: interaction.channel_id,\n  application_id: interaction.application_id,\n  token: interaction.token,\n});"
+        "jsCode": "const crypto = require('crypto');\n\nconst reply = (status, body) => [{ json: { kind: 'respond', status, body } }];\n// Ephemeral: only the person who ran the command sees it.\nconst say = (content) => reply(200, { type: 4, data: { content, flags: 64 } });\n\n// Discord signs timestamp + raw body with the application's Ed25519 key, and\n// probes the endpoint with bad signatures, which must get a 401.\nconst raw = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst headers = $input.first().json.headers;\nconst signature = headers['x-signature-ed25519'] ?? '';\nconst timestamp = headers['x-signature-timestamp'] ?? '';\nconst publicKey = $env.DISCORD_PUBLIC_KEY;\nif (!publicKey) throw new Error('DISCORD_PUBLIC_KEY is not set');\n\nlet valid = false;\ntry {\n  // A raw 32-byte Ed25519 key behind the fixed SPKI prefix.\n  const key = crypto.createPublicKey({\n    key: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), Buffer.from(publicKey, 'hex')]),\n    format: 'der',\n    type: 'spki',\n  });\n  valid = /^[0-9a-f]{128}$/i.test(signature)\n    && Math.abs(Date.now() / 1000 - Number(timestamp)) < 300\n    && crypto.verify(null, Buffer.concat([Buffer.from(timestamp), raw]), key, Buffer.from(signature, 'hex'));\n} catch (e) {\n  valid = false;\n}\nif (!valid) return reply(401, { error: 'invalid request signature' });\n\nconst interaction = JSON.parse(raw.toString('utf8'));\nif (interaction.type === 1) return reply(200, { type: 1 }); // PING\n\nif ($env.DISCORD_GUILD_ID && interaction.guild_id !== $env.DISCORD_GUILD_ID) return say('This command is not available here.');\n\nconst name = interaction.data?.name;\nif (![2, 4].includes(interaction.type) || !['tasks', 'add', 'done'].includes(name)) return say('Unknown command.');\n\nconst given = interaction.data.options ?? [];\nconst command = {\n  name,\n  options: Object.fromEntries(given.map((o) => [o.name, typeof o.value === 'string' ? o.value.trim() : o.value])),\n  channel_id: interaction.channel_id,\n  application_id: interaction.application_id,\n  token: interaction.token,\n  // Todoist attributes everything done through the API to the account that\n  // connected the credential, so remember who asked.\n  who: interaction.member?.nick ?? interaction.member?.user?.global_name ?? interaction.member?.user?.username ?? 'someone',\n};\n\n// Type 4: Discord wants suggestions for the option being typed, answered\n// directly and within three seconds.\nif (interaction.type === 4) return [{ json: { kind: 'autocomplete', command: { ...command, focused: given.find((o) => o.focused)?.name } } }];\n\n// Type 5 shows \"thinking...\" at once; the result follows as an edit of that\n// message, which lifts Discord's three-second limit on the reply. The list is\n// public; confirmations of a change are for the caller only, because the relay\n// workflow announces the change to the channel anyway.\nreturn [{ json: { kind: 'command', status: 200, body: name === 'tasks' ? { type: 5 } : { type: 5, data: { flags: 64 } }, command } }];"
       },
-      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a02",
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0002",
       "name": "Verify",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r0",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "respond",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "respond"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r1",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "command",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "command"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r2",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "autocomplete",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "autocomplete"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0003",
+      "name": "Route",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        440,
         0
       ]
     },
@@ -42,47 +131,30 @@
           "responseCode": "={{ $json.status }}"
         }
       },
-      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a03",
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0004",
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        440,
-        0
+        660,
+        -300
       ]
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "id": "c1",
-              "leftValue": "={{ $('Verify').first().json.command }}",
-              "rightValue": "",
-              "operator": {
-                "type": "object",
-                "operation": "exists",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "responseCode": "={{ $json.status }}"
+        }
       },
-      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a04",
-      "name": "Is command",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0005",
+      "name": "Respond deferred",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
       "position": [
         660,
-        0
+        -100
       ]
     },
     {
@@ -94,13 +166,13 @@
           "timeout": 8000
         }
       },
-      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a07",
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0006",
       "name": "Get projects",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
         880,
-        -100
+        0
       ],
       "credentials": {
         "oAuth2Api": {
@@ -112,49 +184,200 @@
     },
     {
       "parameters": {
-        "jsCode": "const { project: wanted, channel_id } = $('Verify').first().json.command;\n\n// Nothing typed into the command may ping anyone.\nconst fail = (content) => [{ json: { message: { content, allowed_mentions: { parse: [] } } } }];\nconst norm = (s) => s.trim().toLowerCase();\n\nconst listed = $('Get projects').first().json;\nif (!Array.isArray(listed.results)) {\n  return fail(`Could not reach Todoist: ${listed.error?.message ?? 'no project list returned'}. Is the Todoist credential in n8n still connected?`);\n}\nconst projects = listed.results;\nconst byId = new Map(projects.map((p) => [p.id, p]));\nconst path = (p) => {\n  const names = [];\n  for (let q = p; q && names.length < 10; q = byId.get(q.parent_id)) names.unshift(q.name);\n  return names.join(' / ');\n};\n\nlet project;\nif (wanted) {\n  project = projects.find((p) => norm(p.name) === norm(wanted)) ?? projects.find((p) => norm(path(p)) === norm(wanted));\n  if (!project) return fail(`No Todoist project named \"${wanted}\". Projects: ${projects.map((p) => p.name).join(', ')}`);\n} else {\n  // A webhook URL answers an unauthenticated GET with the channel it posts to,\n  // so the project -> webhook map also says which project this channel is.\n  let channels = {};\n  try {\n    channels = JSON.parse($env.DISCORD_PROJECT_WEBHOOKS || '{}');\n  } catch (e) {\n    channels = {};\n  }\n  const names = await Promise.all(Object.entries(channels).map(async ([name, url]) => {\n    try {\n      return (await this.helpers.httpRequest({ url, json: true, timeout: 8000 })).channel_id === channel_id ? name : null;\n    } catch (e) {\n      return null;\n    }\n  }));\n  const name = names.find(Boolean);\n  project = name && projects.find((p) => norm(p.name) === norm(name));\n  if (!project) return fail('This channel is not mapped to a Todoist project. Try `/tasks project:<name>`.');\n}\n\n// Naming the project is redundant in its own channel, but not when it was\n// asked for by name from somewhere else.\nreturn [{ json: { project_id: project.id, title_prefix: wanted ? `${path(project)}: ` : '' } }];"
+        "jsCode": "const crypto = require('crypto');\n\nconst { kind, command } = $('Verify').first().json;\nconst { name, options, channel_id, focused } = command;\nconst wanted = name === 'tasks' ? options.project ?? '' : '';\n\n// Nothing typed into a command may ping anyone.\nconst fail = (content) => [{\n  json: kind === 'autocomplete'\n    ? { action: 'no-choices', body: { type: 8, data: { choices: [] } } }\n    : { action: 'fail', message: { content, allowed_mentions: { parse: [] } } },\n}];\nconst norm = (s) => s.trim().toLowerCase();\n\nconst listed = $('Get projects').first().json;\nif (!Array.isArray(listed.results)) {\n  return fail(`Could not reach Todoist: ${listed.error?.message ?? 'no project list returned'}. Is the Todoist credential in n8n still connected?`);\n}\nconst projects = listed.results;\nconst byId = new Map(projects.map((p) => [p.id, p]));\nconst path = (p) => {\n  const names = [];\n  for (let q = p; q && names.length < 10; q = byId.get(q.parent_id)) names.unshift(q.name);\n  return names.join(' / ');\n};\n\nlet project;\nif (wanted) {\n  project = projects.find((p) => norm(p.name) === norm(wanted)) ?? projects.find((p) => norm(path(p)) === norm(wanted));\n  if (!project) return fail(`No Todoist project named \"${wanted}\". Projects: ${projects.map((p) => p.name).join(', ')}`);\n} else {\n  // A webhook URL answers an unauthenticated GET with the channel it posts to,\n  // so the project -> webhook map also says which project this channel is.\n  // Autocomplete asks on every keystroke, so the answers are remembered for a\n  // day, keyed by a hash because the URL itself is a credential.\n  let channels = {};\n  try {\n    channels = JSON.parse($env.DISCORD_PROJECT_WEBHOOKS || '{}');\n  } catch (e) {\n    channels = {};\n  }\n  const cache = $getWorkflowStaticData('global');\n  cache.channels ??= {};\n  const names = await Promise.all(Object.entries(channels).map(async ([project_name, url]) => {\n    const key = crypto.createHash('sha256').update(url).digest('hex');\n    let hit = cache.channels[key];\n    if (!hit || Date.now() - hit.at > 86400000) {\n      try {\n        hit = { id: (await this.helpers.httpRequest({ url, json: true, timeout: 8000 })).channel_id, at: Date.now() };\n        cache.channels[key] = hit;\n      } catch (e) {\n        return null;\n      }\n    }\n    return hit.id === channel_id ? project_name : null;\n  }));\n  const mapped = names.find(Boolean);\n  project = mapped && projects.find((p) => norm(p.name) === norm(mapped));\n  if (!project) {\n    return fail(name === 'tasks'\n      ? 'This channel is not mapped to a Todoist project. Try `/tasks project:<name>`.'\n      : 'Tasks can only be added or completed from a channel that is mapped to a Todoist project.');\n  }\n}\n\nreturn [{\n  json: {\n    action: kind === 'autocomplete' ? `choices-${focused}` : name,\n    project_id: project.id,\n    project_name: path(project),\n    // Naming the project is redundant in its own channel, but not when it was\n    // asked for by name from somewhere else.\n    title_prefix: wanted ? `${path(project)}: ` : '',\n  },\n}];"
       },
-      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a08",
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0007",
       "name": "Pick project",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         1100,
-        -100
+        0
       ]
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
-          },
-          "conditions": [
+        "rules": {
+          "values": [
             {
-              "id": "c1",
-              "leftValue": "={{ $json.project_id }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "exists",
-                "singleValue": true
-              }
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r0",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "tasks",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "tasks"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r1",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "add",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "add"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r2",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "done",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "done"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r3",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "choices-task",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "choices-task"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r4",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "choices-assignee",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "choices-assignee"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r5",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "fail",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "fail"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r6",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "no-choices",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "no-choices"
             }
-          ],
-          "combinator": "and"
+          ]
         },
         "options": {}
       },
-      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a09",
-      "name": "Found project",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0008",
+      "name": "Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
       "position": [
         1320,
-        -100
+        0
       ]
     },
     {
@@ -166,13 +389,13 @@
           "timeout": 8000
         }
       },
-      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a10",
-      "name": "Get tasks",
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0009",
+      "name": "Get tasks (list)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
         1540,
-        -200
+        -500
       ],
       "credentials": {
         "oAuth2Api": {
@@ -191,12 +414,237 @@
           "timeout": 8000
         }
       },
-      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a11",
-      "name": "Get collaborators",
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0010",
+      "name": "Get collaborators (list)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
         1760,
+        -500
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "TodoistOAuth2001",
+          "name": "Todoist"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const { project_id, title_prefix } = $('Pick project').first().json;\nconst send = (message) => [{ json: { message: { ...message, allowed_mentions: { parse: [] } } } }];\n\nconst listed = $('Get tasks (list)').first().json;\nif (!Array.isArray(listed.results)) return send({ content: `Could not list tasks: ${listed.error?.message ?? 'no task list returned'}` });\nconst tasks = listed.results;\n\n// Empty when the lookup failed; tasks then say \"assigned\" instead of a name.\nconst people = new Map();\nfor (const c of $('Get collaborators (list)').first().json.results ?? []) people.set(String(c.id), c.name);\n\n// Soonest due first, undated last, then by priority (4 = p1) and list order.\ntasks.sort((a, b) => (a.due?.date ?? '9999').localeCompare(b.due?.date ?? '9999')\n  || (b.priority ?? 1) - (a.priority ?? 1)\n  || (a.child_order ?? 0) - (b.child_order ?? 0));\n\nconst lines = [];\nlet length = 0;\nfor (const t of tasks) {\n  const text = t.content.length > 150 ? `${t.content.slice(0, 149)}…` : t.content;\n  // Content that already holds a markdown link cannot be wrapped in another.\n  let line = text.includes('](') ? `• ${text}` : `• [${text}](https://app.todoist.com/app/task/${t.id})`;\n  if (t.due) line += ` — ${t.due.string || t.due.date}`;\n  if (t.priority > 1) line += ` · p${5 - t.priority}`;\n  if (t.responsible_uid) line += ` · ${people.get(String(t.responsible_uid)) ?? 'assigned'}`;\n  // An embed description holds 4096 characters.\n  if (length + line.length + 1 > 3900) break;\n  lines.push(line);\n  length += line.length + 1;\n}\nif (lines.length < tasks.length) lines.push(`…and ${tasks.length - lines.length} more`);\n\nreturn send({\n  embeds: [{\n    title: `${title_prefix}${tasks.length} open ${tasks.length === 1 ? 'task' : 'tasks'}`,\n    url: `https://app.todoist.com/app/project/${project_id}`,\n    description: lines.join('\\n') || 'Nothing open.',\n    color: 0x3b82f6,\n    timestamp: new Date().toISOString(),\n  }],\n});"
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0011",
+      "name": "Build list",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        -500
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.todoist.com/api/v1/projects/{{ $('Pick project').first().json.project_id }}/collaborators?limit=200",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 8000
+        }
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0012",
+      "name": "Get collaborators (add)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        -300
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "TodoistOAuth2001",
+          "name": "Todoist"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const { options, who } = $('Verify').first().json.command;\nconst { project_id } = $('Pick project').first().json;\nconst fail = (content) => [{ json: { message: { content, allowed_mentions: { parse: [] } } } }];\n\nconst content = (options.task ?? '').trim();\nif (!content) return fail('A task needs some text.');\n\nconst body = { content: content.slice(0, 500), project_id, description: `Added from Discord by ${who}.` };\nif (options.due) body.due_string = options.due;\n// The command offers p1-p4; the API counts the other way (4 = p1).\nif (options.priority) body.priority = 5 - options.priority;\n\nif (options.assignee) {\n  // The value is a collaborator id when picked from the suggestions, or\n  // whatever was typed otherwise.\n  const people = $('Get collaborators (add)').first().json.results ?? [];\n  const typed = String(options.assignee).toLowerCase();\n  const person = people.find((c) => String(c.id) === String(options.assignee))\n    ?? people.find((c) => c.name.toLowerCase() === typed)\n    ?? (people.filter((c) => c.name.toLowerCase().includes(typed)).length === 1 ? people.find((c) => c.name.toLowerCase().includes(typed)) : null);\n  if (!person) return fail(`Nobody in this project matches \"${options.assignee}\". People: ${people.map((c) => c.name).join(', ') || 'none'}`);\n  body.assignee_id = person.id;\n  return [{ json: { body, assignee: person.name } }];\n}\nreturn [{ json: { body } }];"
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0013",
+      "name": "Prepare task",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.body }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0014",
+      "name": "Can create",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1980,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.todoist.com/api/v1/tasks",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 8000
+        },
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0015",
+      "name": "Create task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        -400
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "TodoistOAuth2001",
+          "name": "Todoist"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const created = $input.first().json;\nconst { assignee } = $('Prepare task').first().json;\nconst send = (content) => [{ json: { message: { content, allowed_mentions: { parse: [] } } } }];\n\nif (!created.id) return send(`Todoist did not accept the task: ${created.error?.message ?? 'no task returned'}`);\n\nlet line = `Added [${created.content}](https://app.todoist.com/app/task/${created.id})`;\nif (created.due) line += `, due ${created.due.string || created.due.date}`;\nif (created.priority > 1) line += `, p${5 - created.priority}`;\nif (assignee) line += `, assigned to ${assignee}`;\nreturn send(`${line}.`);"
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0016",
+      "name": "Add reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.todoist.com/api/v1/tasks?project_id={{ $('Pick project').first().json.project_id }}&limit=200",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 8000
+        }
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0017",
+      "name": "Get tasks (done)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        -100
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "TodoistOAuth2001",
+          "name": "Todoist"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const { options } = $('Verify').first().json.command;\nconst fail = (content) => [{ json: { message: { content, allowed_mentions: { parse: [] } } } }];\n\nconst listed = $('Get tasks (done)').first().json;\nif (!Array.isArray(listed.results)) return fail(`Could not list tasks: ${listed.error?.message ?? 'no task list returned'}`);\n\n// The value is a task id when picked from the suggestions, or whatever was\n// typed otherwise. Only this project's open tasks can match, so an id from\n// anywhere else in the account is refused.\nconst typed = String(options.task ?? '').toLowerCase();\nif (!typed) return fail('Which task?');\nconst tasks = listed.results;\nlet matches = tasks.filter((t) => String(t.id).toLowerCase() === typed);\nif (!matches.length) matches = tasks.filter((t) => t.content.toLowerCase() === typed);\nif (!matches.length) matches = tasks.filter((t) => t.content.toLowerCase().includes(typed));\n\nif (!matches.length) return fail(`No open task here matches \"${options.task}\".`);\nif (matches.length > 1) return fail(`\"${options.task}\" matches ${matches.length} tasks: ${matches.slice(0, 5).map((t) => t.content).join('; ')}. Pick one from the suggestions.`);\nreturn [{ json: { task_id: matches[0].id, content: matches[0].content, recurring: Boolean(matches[0].due?.is_recurring) } }];"
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0018",
+      "name": "Find task",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.task_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0019",
+      "name": "Found task",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1980,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.todoist.com/api/v1/tasks/{{ $json.task_id }}/close",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 8000
+        },
+        "method": "POST"
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0020",
+      "name": "Close task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
         -200
       ],
       "credentials": {
@@ -209,15 +657,108 @@
     },
     {
       "parameters": {
-        "jsCode": "const { project_id, title_prefix } = $('Pick project').first().json;\nconst send = (message) => [{ json: { message: { ...message, allowed_mentions: { parse: [] } } } }];\n\nconst listed = $('Get tasks').first().json;\nif (!Array.isArray(listed.results)) return send({ content: `Could not list tasks: ${listed.error?.message ?? 'no task list returned'}` });\nconst tasks = listed.results;\n\n// Empty when the lookup failed; tasks then say \"assigned\" instead of a name.\nconst people = new Map();\nfor (const c of $('Get collaborators').first().json.results ?? []) people.set(String(c.id), c.name);\n\n// Soonest due first, undated last, then by priority (4 = p1) and list order.\ntasks.sort((a, b) => (a.due?.date ?? '9999').localeCompare(b.due?.date ?? '9999')\n  || (b.priority ?? 1) - (a.priority ?? 1)\n  || (a.child_order ?? 0) - (b.child_order ?? 0));\n\nconst lines = [];\nlet length = 0;\nfor (const t of tasks) {\n  const text = t.content.length > 150 ? `${t.content.slice(0, 149)}…` : t.content;\n  // Content that already holds a markdown link cannot be wrapped in another.\n  let line = text.includes('](') ? `• ${text}` : `• [${text}](https://app.todoist.com/app/task/${t.id})`;\n  if (t.due) line += ` — ${t.due.string || t.due.date}`;\n  if (t.priority > 1) line += ` · p${5 - t.priority}`;\n  if (t.responsible_uid) line += ` · ${people.get(String(t.responsible_uid)) ?? 'assigned'}`;\n  // An embed description holds 4096 characters.\n  if (length + line.length + 1 > 3900) break;\n  lines.push(line);\n  length += line.length + 1;\n}\nif (lines.length < tasks.length) lines.push(`…and ${tasks.length - lines.length} more`);\n\nreturn send({\n  embeds: [{\n    title: `${title_prefix}${tasks.length} open ${tasks.length === 1 ? 'task' : 'tasks'}`,\n    url: `https://app.todoist.com/app/project/${project_id}`,\n    description: lines.join('\\n') || 'Nothing open.',\n    color: 0x3b82f6,\n    timestamp: new Date().toISOString(),\n  }],\n});"
+        "jsCode": "const closed = $input.first().json;\nconst { content, recurring } = $('Find task').first().json;\nconst send = (text) => [{ json: { message: { content: text, allowed_mentions: { parse: [] } } } }];\n\nif (closed.error) return send(`Todoist did not complete \"${content}\": ${closed.error.message ?? 'unknown error'}`);\nreturn send(recurring ? `Completed \"${content}\"; it recurs, so it moves to its next date.` : `Completed \"${content}\".`);"
       },
-      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a05",
-      "name": "Build reply",
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0021",
+      "name": "Done reply",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1980,
+        2420,
         -200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.todoist.com/api/v1/tasks?project_id={{ $('Pick project').first().json.project_id }}&limit=200",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 8000
+        }
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0022",
+      "name": "Get tasks (choices)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        100
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "TodoistOAuth2001",
+          "name": "Todoist"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const typed = String($('Verify').first().json.command.options.task ?? '').toLowerCase();\nconst tasks = $input.first().json.results ?? [];\n\n// Discord shows at most 25 suggestions, each up to 100 characters.\nconst choices = tasks\n  .filter((t) => t.content.toLowerCase().includes(typed))\n  .sort((a, b) => (a.due?.date ?? '9999').localeCompare(b.due?.date ?? '9999'))\n  .slice(0, 25)\n  .map((t) => {\n    const due = t.due ? ` (${t.due.string || t.due.date})` : '';\n    const room = 100 - due.length;\n    return { name: (t.content.length > room ? `${t.content.slice(0, room - 1)}…` : t.content) + due, value: String(t.id) };\n  });\nreturn [{ json: { body: { type: 8, data: { choices } } } }];"
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0023",
+      "name": "Task choices",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.todoist.com/api/v1/projects/{{ $('Pick project').first().json.project_id }}/collaborators?limit=200",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 8000
+        }
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0024",
+      "name": "Get collaborators (choices)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        300
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "TodoistOAuth2001",
+          "name": "Todoist"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const typed = String($('Verify').first().json.command.options.assignee ?? '').toLowerCase();\nconst people = $input.first().json.results ?? [];\n\nconst choices = people\n  .filter((c) => c.name.toLowerCase().includes(typed))\n  .slice(0, 25)\n  .map((c) => ({ name: c.name.slice(0, 100), value: String(c.id) }));\nreturn [{ json: { body: { type: 8, data: { choices } } } }];"
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0025",
+      "name": "People choices",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0026",
+      "name": "Respond choices",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        200
       ]
     },
     {
@@ -229,13 +770,13 @@
         "jsonBody": "={{ JSON.stringify($json.message) }}",
         "options": {}
       },
-      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a06",
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0027",
       "name": "Edit deferred reply",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2200,
-        -100
+        2640,
+        -200
       ],
       "retryOnFail": true,
       "maxTries": 4,
@@ -258,25 +799,39 @@
       "main": [
         [
           {
+            "node": "Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route": {
+      "main": [
+        [
+          {
             "node": "Respond",
             "type": "main",
             "index": 0
           }
-        ]
-      ]
-    },
-    "Respond": {
-      "main": [
+        ],
         [
           {
-            "node": "Is command",
+            "node": "Respond deferred",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get projects",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Is command": {
+    "Respond deferred": {
       "main": [
         [
           {
@@ -284,8 +839,7 @@
             "type": "main",
             "index": 0
           }
-        ],
-        []
+        ]
       ]
     },
     "Get projects": {
@@ -303,18 +857,126 @@
       "main": [
         [
           {
-            "node": "Found project",
+            "node": "Action",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Found project": {
+    "Action": {
       "main": [
         [
           {
-            "node": "Get tasks",
+            "node": "Get tasks (list)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get collaborators (add)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get tasks (done)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get tasks (choices)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get collaborators (choices)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit deferred reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond choices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get tasks (list)": {
+      "main": [
+        [
+          {
+            "node": "Get collaborators (list)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get collaborators (list)": {
+      "main": [
+        [
+          {
+            "node": "Build list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build list": {
+      "main": [
+        [
+          {
+            "node": "Edit deferred reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get collaborators (add)": {
+      "main": [
+        [
+          {
+            "node": "Prepare task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare task": {
+      "main": [
+        [
+          {
+            "node": "Can create",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Can create": {
+      "main": [
+        [
+          {
+            "node": "Create task",
             "type": "main",
             "index": 0
           }
@@ -328,33 +990,128 @@
         ]
       ]
     },
-    "Get tasks": {
+    "Create task": {
       "main": [
         [
           {
-            "node": "Get collaborators",
+            "node": "Add reply",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Get collaborators": {
-      "main": [
-        [
-          {
-            "node": "Build reply",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build reply": {
+    "Add reply": {
       "main": [
         [
           {
             "node": "Edit deferred reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get tasks (done)": {
+      "main": [
+        [
+          {
+            "node": "Find task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find task": {
+      "main": [
+        [
+          {
+            "node": "Found task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Found task": {
+      "main": [
+        [
+          {
+            "node": "Close task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit deferred reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Close task": {
+      "main": [
+        [
+          {
+            "node": "Done reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Done reply": {
+      "main": [
+        [
+          {
+            "node": "Edit deferred reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get tasks (choices)": {
+      "main": [
+        [
+          {
+            "node": "Task choices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Task choices": {
+      "main": [
+        [
+          {
+            "node": "Respond choices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get collaborators (choices)": {
+      "main": [
+        [
+          {
+            "node": "People choices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "People choices": {
+      "main": [
+        [
+          {
+            "node": "Respond choices",
             "type": "main",
             "index": 0
           }
