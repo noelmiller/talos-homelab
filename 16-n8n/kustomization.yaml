@@ -6,6 +6,7 @@ resources:
   - sealed-n8n-postgresql.yaml
   - sealed-n8n-encryption-key.yaml
   - sealed-n8n-todoist-discord.yaml
+  - sealed-n8n-discord-project-webhooks.yaml
   - sealed-cloudflared-credentials.yaml
   - n8n.yaml
   - n8n-route.yaml

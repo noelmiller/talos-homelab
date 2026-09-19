@@ -119,6 +119,16 @@ spec:
                   name: n8n-todoist-discord
                   key: todoist-api-token
                   optional: true
+            # JSON object of Todoist project name -> Discord webhook URL, one
+            # per channel (seal-project-webhook.sh). Projects not listed, and
+            # everything when this is absent, go to DISCORD_WEBHOOK_URL. Read
+            # at start-up: restart the Deployment after the Secret changes.
+            - name: DISCORD_PROJECT_WEBHOOKS
+              valueFrom:
+                secretKeyRef:
+                  name: n8n-discord-project-webhooks
+                  key: project-webhooks
+                  optional: true
           ports:
             - name: http
               containerPort: 5678
