@@ -123,7 +123,10 @@
       "position": [
         1100,
         -100
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 2500
     },
     {
       "parameters": {
