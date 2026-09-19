@@ -13,7 +13,8 @@
       "/^05-dashboard/.+\\.yaml$/",
       "/^07-minecraft/.+\\.yaml$/",
       "/^09-palworld/.+\\.yaml$/",
-      "/^14-keycloak/.+\\.yaml$/"
+      "/^14-keycloak/.+\\.yaml$/",
+      "/^16-n8n/.+\\.yaml$/"
     ]
   },
   "customDatasources": {
