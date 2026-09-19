@@ -4,7 +4,7 @@ kind: Kustomization
 resources:
   - https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.37/deploy/local-path-storage.yaml
   - https://raw.githubusercontent.com/metallb/metallb/v0.16.1/config/manifests/metallb-native.yaml
-  - https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.1/standard-install.yaml
+  - https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.2/standard-install.yaml
   - https://raw.githubusercontent.com/alex1989hu/kubelet-serving-cert-approver/v0.12.1/deploy/standalone-install.yaml
   - traefik-namespace.yaml
   - cert-manager-namespace.yaml
