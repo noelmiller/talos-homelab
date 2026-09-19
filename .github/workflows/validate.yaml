@@ -17,7 +17,7 @@ jobs:
     name: Render and schema-check every layer
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Install kubeconform
         run: |
@@ -51,7 +51,7 @@ jobs:
       run:
         working-directory: 10-linode-relay
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: hashicorp/setup-terraform@v3
       - run: terraform fmt -check -recursive -diff
       - run: terraform init -backend=false -input=false
