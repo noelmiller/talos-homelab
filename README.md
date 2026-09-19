@@ -404,8 +404,9 @@ the community edition has no OIDC. Third-party services reach webhooks
 through a `cloudflared` Deployment running a locally-managed Cloudflare
 Tunnel whose ingress rules live in git and publish `/webhook/` only.
 
-The first workflow relays Todoist `item:added` and `item:completed` events to
-a Discord channel, verifying Todoist's HMAC signature first. See
+The first workflow relays Todoist task events (added, updated, completed,
+deleted) to a Discord channel with the project name, verifying Todoist's HMAC
+signature first. See
 [16-n8n/README.md](16-n8n/README.md) for the tunnel, Todoist, and Discord
 setup.
 

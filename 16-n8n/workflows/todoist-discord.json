@@ -15,18 +15,24 @@
       "name": "Todoist webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0],
+      "position": [
+        0,
+        0
+      ],
       "webhookId": "7e0e3f0a-3f5e-4f0e-9a44-6c5d1b2a9f10"
     },
     {
       "parameters": {
-        "jsCode": "const crypto = require('crypto');\n\nconst EVENTS = {\n  'item:added': { title: 'Task added', color: 0x3b82f6 },\n  'item:completed': { title: 'Task completed', color: 0x22c55e },\n};\n\n// Todoist signs the raw request body, so verify before parsing anything.\nconst raw = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst given = Buffer.from($input.first().json.headers['x-todoist-hmac-sha256'] ?? '');\nconst secret = $env.TODOIST_CLIENT_SECRET;\nif (!secret) throw new Error('TODOIST_CLIENT_SECRET is not set');\nconst expected = Buffer.from(crypto.createHmac('sha256', secret).update(raw).digest('base64'));\nif (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {\n  return [{ json: { status: 401, reply: 'bad signature' } }];\n}\n\nconst { event_name, event_data: item } = JSON.parse(raw.toString('utf8'));\nconst ev = EVENTS[event_name];\nif (!ev) return [{ json: { status: 200, reply: 'ignored' } }];\n\nconst fields = [];\nif (item.due?.string) fields.push({ name: 'Due', value: item.due.string, inline: true });\n// Todoist API priority is inverted: 4 = p1, 1 = p4\nif (item.priority > 1) fields.push({ name: 'Priority', value: `p${5 - item.priority}`, inline: true });\n\nreturn [{\n  json: {\n    status: 200,\n    reply: 'sent',\n    discord: {\n      embeds: [{\n        title: ev.title,\n        description: item.content,\n        url: `https://app.todoist.com/app/task/${item.id}`,\n        color: ev.color,\n        fields,\n        timestamp: new Date().toISOString(),\n      }],\n    },\n  },\n}];"
+        "jsCode": "const crypto = require('crypto');\n\nconst EVENTS = ['item:added', 'item:updated', 'item:completed', 'item:deleted'];\nconst ignored = (why) => [{ json: { status: 200, reply: `ignored: ${why}` } }];\n\n// Todoist signs the raw request body, so verify before parsing anything.\nconst raw = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst given = Buffer.from($input.first().json.headers['x-todoist-hmac-sha256'] ?? '');\nconst secret = $env.TODOIST_CLIENT_SECRET;\nif (!secret) throw new Error('TODOIST_CLIENT_SECRET is not set');\nconst expected = Buffer.from(crypto.createHmac('sha256', secret).update(raw).digest('base64'));\nif (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {\n  return [{ json: { status: 401, reply: 'bad signature' } }];\n}\n\nconst { event_name, event_data: item, event_data_extra: extra } = JSON.parse(raw.toString('utf8'));\nif (!EVENTS.includes(event_name)) return ignored(event_name);\n\n// Todoist API priority is inverted: 4 = p1, 1 = p4\nconst prio = (p) => `p${5 - (p ?? 1)}`;\nconst due = (d) => d?.string || d?.date || 'none';\nconst labels = (l) => (l?.length ? l.join(', ') : 'none');\nconst clip = (s, n = 300) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);\n// Older webhook payloads carry numeric ids plus v2_* ids; the API wants the latter.\nconst projectId = (i) => i?.v2_project_id ?? i?.project_id;\n\nconst changes = [];\nif (event_name === 'item:updated') {\n  // Completing, uncompleting, and every occurrence of a recurring task also\n  // send item:updated; those have their own events.\n  const intent = extra?.update_intent;\n  if (intent && intent !== 'item_updated') return ignored(`update_intent ${intent}`);\n\n  const old = extra?.old_item;\n  if (old) {\n    const diff = (name, a, b) => { if (a !== b) changes.push({ name, value: clip(`${a} → ${b}`), inline: false }); };\n    diff('Content', old.content, item.content);\n    diff('Due', due(old.due), due(item.due));\n    diff('Priority', prio(old.priority), prio(item.priority));\n    diff('Labels', labels(old.labels), labels(item.labels));\n    if ((old.description ?? '') !== (item.description ?? '')) changes.push({ name: 'Description', value: 'changed', inline: false });\n    if (projectId(old) !== projectId(item)) changes.push({ name: 'Moved', value: 'from another project', inline: false });\n    // Reordering, collapsing, and similar edits are not worth a message.\n    if (!changes.length) return ignored('no visible change');\n  }\n}\n\nreturn [{ json: { status: 200, event_name, item, changes, project_id: projectId(item) ?? '' } }];"
       },
       "id": "5a1f4c1e-7c0b-4f57-9a35-1d2c0e6b7a02",
-      "name": "Verify and format",
+      "name": "Verify and parse",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -40,7 +46,7 @@
           "conditions": [
             {
               "id": "c1",
-              "leftValue": "={{ $json.discord }}",
+              "leftValue": "={{ $json.item }}",
               "rightValue": "",
               "operator": {
                 "type": "object",
@@ -54,10 +60,52 @@
         "options": {}
       },
       "id": "5a1f4c1e-7c0b-4f57-9a35-1d2c0e6b7a03",
-      "name": "Has message",
+      "name": "Is relayed",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.todoist.com/api/v1/projects/{{ $json.project_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.TODOIST_API_TOKEN }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "5a1f4c1e-7c0b-4f57-9a35-1d2c0e6b7a07",
+      "name": "Get project",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        -100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const STYLE = {\n  'item:added': { title: 'Task added', color: 0x3b82f6 },\n  'item:updated': { title: 'Task updated', color: 0xf59e0b },\n  'item:completed': { title: 'Task completed', color: 0x22c55e },\n  'item:deleted': { title: 'Task deleted', color: 0xef4444 },\n};\n\nconst { event_name, item, changes } = $('Verify and parse').first().json;\n// Empty when the lookup failed or no API token is configured.\nconst project = $input.first().json.name;\nconst style = STYLE[event_name];\n\nconst fields = [];\nif (project) fields.push({ name: 'Project', value: project, inline: true });\nif (event_name === 'item:updated' && changes.length) {\n  fields.push(...changes);\n} else {\n  if (item.due?.string) fields.push({ name: 'Due', value: item.due.string, inline: true });\n  // Todoist API priority is inverted: 4 = p1, 1 = p4\n  if (item.priority > 1) fields.push({ name: 'Priority', value: `p${5 - item.priority}`, inline: true });\n}\n\nconst embed = {\n  title: style.title,\n  description: (item.content ?? '').slice(0, 2000),\n  color: style.color,\n  fields,\n  timestamp: new Date().toISOString(),\n};\n// A deleted task has nothing to link to.\nif (event_name !== 'item:deleted') embed.url = `https://app.todoist.com/app/task/${item.v2_id ?? item.id}`;\n\nreturn [{ json: { discord: { embeds: [embed] } } }];"
+      },
+      "id": "5a1f4c1e-7c0b-4f57-9a35-1d2c0e6b7a08",
+      "name": "Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -72,7 +120,10 @@
       "name": "Post to Discord",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [660, -100]
+      "position": [
+        1100,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -86,7 +137,10 @@
       "name": "Reply sent",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [880, -100]
+      "position": [
+        1320,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -100,24 +154,85 @@
       "name": "Reply without sending",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [660, 100]
+      "position": [
+        660,
+        100
+      ]
     }
   ],
   "connections": {
     "Todoist webhook": {
-      "main": [[{ "node": "Verify and format", "type": "main", "index": 0 }]]
-    },
-    "Verify and format": {
-      "main": [[{ "node": "Has message", "type": "main", "index": 0 }]]
-    },
-    "Has message": {
       "main": [
-        [{ "node": "Post to Discord", "type": "main", "index": 0 }],
-        [{ "node": "Reply without sending", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Verify and parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify and parse": {
+      "main": [
+        [
+          {
+            "node": "Is relayed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is relayed": {
+      "main": [
+        [
+          {
+            "node": "Get project",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply without sending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get project": {
+      "main": [
+        [
+          {
+            "node": "Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format": {
+      "main": [
+        [
+          {
+            "node": "Post to Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Post to Discord": {
-      "main": [[{ "node": "Reply sent", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Reply sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
