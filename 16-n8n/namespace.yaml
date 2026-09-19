@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: n8n
+  # The n8n, cloudflared, and Bitnami PostgreSQL images all run as non-root,
+  # so the namespace can enforce restricted.
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - sealed-n8n-postgresql.yaml
+  - sealed-n8n-encryption-key.yaml
+  - sealed-n8n-todoist-discord.yaml
+  - sealed-cloudflared-credentials.yaml
+  - n8n.yaml
+  - n8n-route.yaml
+  - cloudflared.yaml
+
+# Hashed name: editing the ingress rules rolls cloudflared.
+configMapGenerator:
+  - name: cloudflared-config
+    namespace: n8n
+    files:
+      - cloudflared-config.yaml
+
+helmCharts:
+  - name: postgresql
+    repo: https://charts.bitnami.com/bitnami
+    releaseName: n8n-postgresql
+    namespace: n8n
+    version: 18.11.3
+    valuesFile: postgresql-values.yaml
+
+patches:
+  # Never let an Argo CD prune or a cascading Application delete remove a PVC.
+  # Data lives on local disks and is not reproducible from git.
+  - target:
+      kind: PersistentVolumeClaim
+    patch: |-
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: not-used
+        annotations:
+          argocd.argoproj.io/sync-options: Prune=false,Delete=false

@@ -31,6 +31,7 @@ metrics-server-kubelet-patch.yaml Talos KubeletConfig patch enabling serving-cer
 13-forgejo/                       Forgejo git forge with PostgreSQL, HTTPS and SSH through Traefik
 14-keycloak/                      Keycloak single sign-on with PostgreSQL and a git-managed realm
 15-velero/                        Velero backups of cluster objects and volume data to Backblaze B2
+16-n8n/                           n8n workflow automation with PostgreSQL and a Cloudflare Tunnel for webhooks
 tests/                            On-demand smoke-test manifests, never applied by ArgoCD
 .github/workflows/                CI: renders every layer, schema-checks it, validates Terraform
 ```
@@ -193,7 +194,7 @@ Once ArgoCD is running (from step 3), bootstrap the app-of-apps pattern **once**
 kubectl apply -f 04-gitops/root-app.yaml
 ```
 
-This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, `virtualization`, `minecraft`, `monitoring`, `palworld`, `unifi`, `coder`, `forgejo`, `keycloak`, and `velero`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
+This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, `virtualization`, `minecraft`, `monitoring`, `palworld`, `unifi`, `coder`, `forgejo`, `keycloak`, `velero`, and `n8n`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
 
 From here on, the workflow is just:
 
@@ -205,7 +206,7 @@ ArgoCD polls the repo and auto-syncs + self-heals drift. Force an immediate sync
 
 ### Do not `kubectl apply --server-side` over ArgoCD-managed layers
 
-The bootstrap command in step 3 is for a cluster ArgoCD does not manage yet. Run by hand later, it leaves a `kubectl` field manager co-owning every field it touched. `monitoring`, `virtualization`, `coder`, `forgejo`, `keycloak`, and `velero` sync with `ServerSideApply=true`, where a field is only deleted once its *last* manager drops it: a field removed in git then stays live while the Application still reports `Synced` (this is how a removed node-exporter CPU limit survived a sync). Use `kubectl diff` or `--dry-run=server` to try things out, which record nothing.
+The bootstrap command in step 3 is for a cluster ArgoCD does not manage yet. Run by hand later, it leaves a `kubectl` field manager co-owning every field it touched. `monitoring`, `virtualization`, `coder`, `forgejo`, `keycloak`, `velero`, and `n8n` sync with `ServerSideApply=true`, where a field is only deleted once its *last* manager drops it: a field removed in git then stays live while the Application still reports `Synced` (this is how a removed node-exporter CPU limit survived a sync). Use `kubectl diff` or `--dry-run=server` to try things out, which record nothing.
 
 After merging a change that *removes* a field from one of those layers, check the live object rather than trusting `Synced`. If a stale manager shows up in `kubectl get <kind> <name> --show-managed-fields -o yaml`, make it relinquish by server-side-applying a manifest holding only `apiVersion`, `kind`, `metadata.name`, and `metadata.namespace` with `--field-manager=<stale manager>`; fields that manager alone owned are deleted, everything ArgoCD also owns is untouched.
 
@@ -387,10 +388,32 @@ names each volume still waiting; `VeleroBackupStale` and
 restore procedures: one application, one media app, a non-destructive
 rehearsal, and a full rebuild.
 
+## 14. n8n
+
+The `n8n` namespace runs [n8n](https://n8n.io/) from the official image (raw
+manifests, Renovate-pinned) with a Bitnami PostgreSQL instance and a 5Gi data
+volume on `nvme-2tb`. Pod Security is `restricted`.
+
+| Purpose | Address |
+|---|---|
+| Editor (LAN only) | `https://n8n.k8s.noelmiller.dev` |
+| Production webhooks (public) | `https://hooks.noelmiller.dev/webhook/...` |
+
+Sign-in is n8n's own owner account, created in the browser on first visit;
+the community edition has no OIDC. Third-party services reach webhooks
+through a `cloudflared` Deployment running a locally-managed Cloudflare
+Tunnel whose ingress rules live in git and publish `/webhook/` only.
+
+The first workflow relays Todoist `item:added` and `item:completed` events to
+a Discord channel, verifying Todoist's HMAC signature first. See
+[16-n8n/README.md](16-n8n/README.md) for the tunnel, Todoist, and Discord
+setup.
+
 ## Networking notes
 
 - The Traefik LoadBalancer IP (`10.42.0.11`) now listens on `22` as well as `80`/`443`. Only Forgejo's `IngressRouteTCP` is attached to that EntryPoint; Traefik closes connections that match no route.
-- The cluster's MetalLB pool (`10.42.0.11-10.42.0.48`) is **private/LAN-only** — reachable from your home network, not the public internet. For external access you'd additionally need a public DNS record and port-forwarding/tunnel (e.g. Cloudflare Tunnel) — not currently configured.
+- The cluster's MetalLB pool (`10.42.0.11-10.42.0.48`) is **private/LAN-only** — reachable from your home network, not the public internet. For external access you'd additionally need a public DNS record and port-forwarding/tunnel.
+- The one HTTP path published to the internet is `https://hooks.noelmiller.dev/webhook/*`, which a Cloudflare Tunnel in the `n8n` namespace forwards to n8n's production webhooks. It dials out to Cloudflare, so no port is forwarded and Traefik is not involved; every other path on that hostname returns 404. See [16-n8n/README.md](16-n8n/README.md).
 - Point any local DNS override (e.g. a router's custom DNS zone) at the **Gateway/Traefik Service's external IP** (`kubectl -n traefik get svc traefik`), not the node's own IP — they're not the same thing, and only the Service IP has anything actually listening on 80/443.
 - KubeVirt Manager is available at `https://kubevirt.k8s.noelmiller.dev` and is intended only for the trusted LAN. It has broad VM-management permissions and does not enable authentication by default.
 - KubeVirt VMs use the Talos-managed `br0` bridge and the `lan` Multus network to join the physical LAN. Apply [talos-kubevirt-network-patch.yaml](talos-kubevirt-network-patch.yaml) to move the node address and default route from `enp6s0` to `br0`:
@@ -422,5 +445,5 @@ rehearsal, and a full rebuild.
 
 - `talosconfig`, `controlplane.yaml`, `worker.yaml`, and `cloudflare-secret.yaml` are gitignored — they contain cluster PKI private keys, join tokens, and a plaintext API token. Never commit them.
 - All in-repo secrets are `SealedSecret`s, decryptable only by the sealed-secrets controller running in this specific cluster.
-- Every namespace carries [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/) labels. `argocd`, `traefik`, `cert-manager`, `kubevirt-manager`, `minecraft`, `palworld`, `forgejo`, and `keycloak` enforce `restricted`; `dashboard`, `coder`, and `default` enforce `baseline` (Homepage runs as root, Coder workspaces may need capabilities, VMs need `virt-launcher`) and warn at `restricted`; `media`, `monitoring`, `unifi`, `kubevirt`, `cdi`, `metallb-system`, and `local-path-storage` are `privileged` because a workload in each genuinely needs it. Check `kubectl label --dry-run=server --overwrite ns <ns> pod-security.kubernetes.io/enforce=restricted` before tightening one.
+- Every namespace carries [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/) labels. `argocd`, `traefik`, `cert-manager`, `kubevirt-manager`, `minecraft`, `palworld`, `forgejo`, `keycloak`, and `n8n` enforce `restricted`; `dashboard`, `coder`, and `default` enforce `baseline` (Homepage runs as root, Coder workspaces may need capabilities, VMs need `virt-launcher`) and warn at `restricted`; `media`, `monitoring`, `unifi`, `kubevirt`, `cdi`, `metallb-system`, and `local-path-storage` are `privileged` because a workload in each genuinely needs it. Check `kubectl label --dry-run=server --overwrite ns <ns> pod-security.kubernetes.io/enforce=restricted` before tightening one.
 - Resource requests on the media stack, Homepage, and Coder were sized from seven days of Prometheus data (peak working-set memory, p95 CPU) with memory limits at roughly three times the observed peak and no CPU limits on bursty workloads such as Jellyfin transcoding.

@@ -29,7 +29,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p rendered
-          for dir in 01-infrastructure 02-configuration 03-media 05-dashboard 06-virtualization 07-minecraft 08-monitoring 09-palworld 11-unifi 12-coder 13-forgejo 14-keycloak 15-velero; do
+          for dir in 01-infrastructure 02-configuration 03-media 05-dashboard 06-virtualization 07-minecraft 08-monitoring 09-palworld 11-unifi 12-coder 13-forgejo 14-keycloak 15-velero 16-n8n; do
             echo "::group::$dir"
             kubectl kustomize --enable-helm "$dir" > "rendered/$dir.yaml"
             echo "$(grep -c '^kind:' "rendered/$dir.yaml") objects"

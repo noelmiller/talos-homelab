@@ -48,6 +48,10 @@
     - KubeVirt Manager:
         href: https://kubevirt.k8s.noelmiller.dev
         description: Virtual machine management
+    - n8n:
+        href: https://n8n.k8s.noelmiller.dev
+        description: Workflow automation
+        icon: n8n.png
     - UniFi:
         href: https://unifi.k8s.noelmiller.dev
         description: Network controller appliance

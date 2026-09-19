@@ -29,6 +29,7 @@ spec:
         - http://coder.coder.svc.cluster.local/healthz
         - http://forgejo-http.forgejo.svc.cluster.local:3000/api/healthz
         - http://keycloak.keycloak.svc.cluster.local:9000/health/ready
+        - http://n8n.n8n.svc.cluster.local:5678/healthz/readiness
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: Probe
@@ -57,6 +58,7 @@ spec:
         - forgejo-ssh.forgejo.svc.cluster.local:22
         - forgejo-postgresql.forgejo.svc.cluster.local:5432
         - keycloak-postgresql.keycloak.svc.cluster.local:5432
+        - n8n-postgresql.n8n.svc.cluster.local:5432
         - kubernetes.default.svc.cluster.local:443
         # End-to-end through the Linode relay, Tailscale, and pfSense back to
         # the MetalLB addresses. Fails if any hop in the public game path breaks.
