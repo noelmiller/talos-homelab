@@ -108,7 +108,7 @@ version of the task, and the embed lists what changed (content, due date,
 priority, labels, description, project, assignee) as `old → new`. An update
 with none of those, such as a drag to reorder, is dropped.
 
-The Todoist API calls are HTTP Request nodes that use the `Todoist (read-only)`
+The Todoist API calls are HTTP Request nodes that use the `Todoist`
 OAuth2 credential (see "Todoist API access" below). One request lists every
 project, which gives the names, and the parents that channel routing walks
 up. If the credential is not connected or the lookup fails, the message is
@@ -190,10 +190,12 @@ Completions of recurring tasks are posted like any other; Todoist sends
 Apps created in the Todoist console today get one-hour access tokens and a
 refresh token that is replaced on every use, and that cannot be turned off.
 A token sealed into a Secret therefore stops working within the hour. Both
-workflows instead use an n8n OAuth2 credential, `Todoist (read-only)`: n8n
+workflows instead use an n8n OAuth2 credential, `Todoist`: n8n
 refreshes the access token when Todoist answers 401, stores the rotated
 refresh token, and keeps both encrypted with `N8N_ENCRYPTION_KEY` in
-PostgreSQL. The scope is `data:read`, so nothing in n8n can change tasks.
+PostgreSQL. The scope is `data:read_write`, which the Discord commands that
+add and complete tasks need; it does not include `data:delete`, so nothing in
+n8n can delete a task or a project.
 
 `credentials/todoist-oauth2.json` holds everything but the client ID and
 secret, under a fixed ID that the workflow files refer to, so importing a
@@ -205,7 +207,7 @@ kubectl -n n8n exec -i deploy/n8n -- sh -c \
   < 16-n8n/credentials/todoist-oauth2.json
 ```
 
-Then in the editor: Credentials > `Todoist (read-only)` > paste the app's
+Then in the editor: Credentials > `Todoist` > paste the app's
 Client ID and Client Secret > Connect my account > Agree > Save. The redirect
 goes to `n8n.k8s.noelmiller.dev`, so do this from the LAN. Running the import
 again resets the credential to its unconnected state.
@@ -243,8 +245,7 @@ HTTP Request that edits the reply.
   longer than an embed holds ends with "and N more". Sub-projects are not
   included. The title names the project only when it was asked for with
   `project:`; in the project's own channel it is just the count.
-- It reads Todoist through the same `data:read` credential, so it cannot change
-  tasks.
+- It reads Todoist through the same credential as the relay.
 
 ### Setup
 1. In the [Discord developer portal](https://discord.com/developers/applications),
@@ -272,7 +273,7 @@ the live copy in PostgreSQL. After editing one in the browser, download it
 The Todoist client secret and the Discord webhook URL are rotated by
 repeating step 3 and restarting n8n (`kubectl -n n8n rollout restart
 deploy/n8n`), since both are read from the environment. A new client secret
-also goes into the `Todoist (read-only)` credential, followed by Reconnect.
+also goes into the `Todoist` credential, followed by Reconnect.
 
 Do not rotate `n8n-encryption-key`: credentials saved in n8n are encrypted
 with it and become unreadable. The PostgreSQL passwords are only applied when

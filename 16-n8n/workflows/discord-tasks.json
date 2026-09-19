@@ -105,7 +105,7 @@
       "credentials": {
         "oAuth2Api": {
           "id": "TodoistOAuth2001",
-          "name": "Todoist (read-only)"
+          "name": "Todoist"
         }
       },
       "onError": "continueRegularOutput"
@@ -177,7 +177,7 @@
       "credentials": {
         "oAuth2Api": {
           "id": "TodoistOAuth2001",
-          "name": "Todoist (read-only)"
+          "name": "Todoist"
         }
       },
       "onError": "continueRegularOutput"
@@ -202,7 +202,7 @@
       "credentials": {
         "oAuth2Api": {
           "id": "TodoistOAuth2001",
-          "name": "Todoist (read-only)"
+          "name": "Todoist"
         }
       },
       "onError": "continueRegularOutput"
