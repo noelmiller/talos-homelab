@@ -13,8 +13,8 @@ webhooks are published to the internet at
 - `sealed-n8n-todoist-discord.yaml`: sealed inputs of the Todoist workflow (`todoist-client-secret`, `discord-webhook-url`).
 - `sealed-n8n-discord-project-webhooks.yaml`: sealed map of Todoist project name to Discord webhook URL (`project-webhooks`, one JSON object), written by `seal-project-webhook.sh`. Optional.
 - `seal-project-webhook.sh`: adds, replaces, or removes entries in that map and reseals it.
-- `sealed-n8n-discord-interactions.yaml`: sealed Discord application public key and server ID for the `/tasks` command (`public-key`, `guild-id`), written by `setup-discord-command.sh`. Optional.
-- `setup-discord-command.sh`: registers the `/tasks` slash command in one server and writes that file.
+- `sealed-n8n-discord-interactions.yaml`: sealed Discord application public key and server ID for the slash commands (`public-key`, `guild-id`), written by `setup-discord-command.sh`. Optional.
+- `setup-discord-command.sh`: registers the `/tasks`, `/add`, and `/done` slash commands in one server and writes that file.
 - `sealed-cloudflared-credentials.yaml`: sealed tunnel credentials (`credentials.json`, `tunnel-id`).
 - `postgresql-values.yaml`: Bitnami PostgreSQL chart values (10Gi on `nvme-2tb`), image pinned to the same PostgreSQL 18 digest as Coder, Forgejo, and Keycloak, with the Velero `pg_dump` hook.
 - `n8n.yaml`: data PVC (5Gi on `nvme-2tb`), Deployment (1 replica, `Recreate`), Service (`5678`), and a ServiceMonitor for `/metrics`.
@@ -23,7 +23,7 @@ webhooks are published to the internet at
 - `cloudflared-config.yaml`: the tunnel's ingress rules, mounted through a hashed ConfigMap.
 - `credentials/todoist-oauth2.json`: the n8n OAuth2 credential for the Todoist API with every field but the client ID and secret filled in (see below). No secrets.
 - `workflows/todoist-discord.json`: the Todoist to Discord workflow, imported by hand (see below). Not applied by Argo CD.
-- `workflows/discord-tasks.json`: the `/tasks` slash command workflow, imported the same way.
+- `workflows/discord-tasks.json`: the Discord slash command workflow, imported the same way.
 
 ## Runtime configuration
 Everything is passed as environment variables: the PostgreSQL connection,
@@ -218,16 +218,24 @@ open it and press Reconnect. A refresh token presented twice more than a
 minute apart makes Todoist revoke every token of the app; two executions
 racing to refresh at the same moment are within that minute.
 
-## Listing tasks from Discord
-`workflows/discord-tasks.json` answers a `/tasks` slash command with the open
-tasks of a Todoist project, as a message everyone in the channel can see.
+## Discord commands
+`workflows/discord-tasks.json` answers three slash commands:
+
+| Command | Does | Who sees the reply |
+|---|---|---|
+| `/tasks [project]` | lists a project's open tasks | the channel |
+| `/add task [due] [priority] [assignee]` | adds a task to the channel's project | the caller |
+| `/done task` | completes a task in the channel's project | the caller |
+
 Discord delivers slash commands over HTTPS to an Interactions Endpoint URL,
 here `https://hooks.noelmiller.dev/webhook/discord`, so there is no bot
 process and no gateway connection.
 
 Webhook (`POST /webhook/discord`, raw body) -> Code node that verifies the
-request -> reply -> Code node that finds the project and lists its tasks ->
-HTTP Request that edits the reply.
+request -> a Switch on ping, command, or autocomplete -> the project is
+resolved -> a Switch per command, each branch being Todoist HTTP Request
+nodes and a Code node that words the answer -> HTTP Request that edits the
+reply.
 
 - Discord signs `timestamp + body` with the application's Ed25519 key. A bad
   signature, or a timestamp more than five minutes off, gets `401`; Discord
@@ -245,18 +253,40 @@ HTTP Request that edits the reply.
   longer than an embed holds ends with "and N more". Sub-projects are not
   included. The title names the project only when it was asked for with
   `project:`; in the project's own channel it is just the count.
-- It reads Todoist through the same credential as the relay.
+- `/add` and `/done` change Todoist, so they are narrower than `/tasks`: they
+  work only in a channel that is mapped to a project, only on that project,
+  and take no `project:` argument. Anyone in the server may use them there.
+  `/done` looks the task up among that project's open tasks, so a task ID
+  from elsewhere in the account is refused, and there is no delete: the
+  credential lacks `data:delete`, and a completed task can be restored in
+  Todoist.
+- Todoist attributes everything done through the API to the account that
+  connected the credential, so `/add` writes "Added from Discord by <name>"
+  into the task's description.
+- `due` is passed to Todoist as typed (`tomorrow`, `fri 5pm`, `every monday`);
+  if Todoist cannot parse it the task is not created and the reply says so.
+- `task` in `/done` and `assignee` in `/add` autocomplete: Discord asks the
+  workflow for suggestions on every keystroke and wants an answer within
+  three seconds, with no deferral. To keep that fast, which channel each
+  mapped webhook posts to is remembered for a day in the workflow's static
+  data, keyed by a hash of the URL. Typed text also works: a unique match is
+  accepted, an ambiguous one is refused with the candidates.
+- Confirmations are shown to the caller only, because the relay workflow
+  announces the new or completed task to the channel anyway.
+- All Todoist access goes through the same credential as the relay.
 
 ### Setup
 1. In the [Discord developer portal](https://discord.com/developers/applications),
    create an application. Under Installation, keep only "Guild Install" and
    the `applications.commands` scope, open the install link, and add it to
    your server. No bot permissions are needed.
-2. Register the command and seal the public key and server ID. The bot token
+2. Register the commands and seal the public key and server ID. The bot token
    (Bot > Reset Token) is used once for the registration call and not stored:
    ```sh
    ./16-n8n/setup-discord-command.sh
    ```
+   Run it again whenever the commands or their options change; it replaces
+   the server's command list and offers to skip the sealing.
 3. Commit `sealed-n8n-discord-interactions.yaml`, merge, and let the pod roll.
 4. In the n8n editor, import `workflows/discord-tasks.json` as a new workflow
    and publish it.
