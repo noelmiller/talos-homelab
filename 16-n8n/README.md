@@ -10,7 +10,7 @@ webhooks are published to the internet at
 - `namespace.yaml`: `n8n` namespace, `restricted` Pod Security.
 - `sealed-n8n-postgresql.yaml`: sealed PostgreSQL credentials (`password`, `postgres-password`).
 - `sealed-n8n-encryption-key.yaml`: sealed `N8N_ENCRYPTION_KEY` (`encryption-key`), which encrypts the credentials saved in n8n.
-- `sealed-n8n-todoist-discord.yaml`: sealed inputs of the Todoist workflow (`todoist-client-secret`, `discord-webhook-url`).
+- `sealed-n8n-todoist-discord.yaml`: sealed inputs of the Todoist workflow (`todoist-client-secret`, `discord-webhook-url`, `todoist-api-token`).
 - `sealed-cloudflared-credentials.yaml`: sealed tunnel credentials (`credentials.json`, `tunnel-id`).
 - `postgresql-values.yaml`: Bitnami PostgreSQL chart values (10Gi on `nvme-2tb`), image pinned to the same PostgreSQL 18 digest as Coder, Forgejo, and Keycloak, with the Velero `pg_dump` hook.
 - `n8n.yaml`: data PVC (5Gi on `nvme-2tb`), Deployment (1 replica, `Recreate`), Service (`5678`), and a ServiceMonitor for `/metrics`.
@@ -85,12 +85,26 @@ Secret is committed.
 
 ## Todoist to Discord
 `workflows/todoist-discord.json` posts an embed to a Discord channel when a
-Todoist task is added or completed:
+Todoist task is added, updated, completed, or deleted, with the name of its
+project:
 
 Webhook (`POST /webhook/todoist`, raw body) -> Code node that verifies
-`X-Todoist-Hmac-SHA256` and builds the embed -> HTTP Request to the Discord
-webhook -> `200 sent`. A bad or missing signature gets `401`; any other
-Todoist event gets `200 ignored`.
+`X-Todoist-Hmac-SHA256` and parses the event -> HTTP Request that looks the
+project name up in the Todoist API -> Code node that builds the embed -> HTTP
+Request to the Discord webhook -> `200 sent`. A bad or missing signature gets
+`401`; anything not relayed gets `200 ignored: <reason>`.
+
+`item:updated` is the noisy one, so it is filtered. Todoist also sends it when
+a task is completed or uncompleted and for every occurrence of a recurring
+task (`update_intent` other than `item_updated`); those are dropped because
+they have their own events. For a real edit the payload carries the previous
+version of the task, and the embed lists what changed (content, due date,
+priority, labels, description, project) as `old → new`. An update with none of
+those, such as a drag to reorder, is dropped.
+
+The project lookup uses `TODOIST_API_TOKEN`, the `data:read` OAuth token from
+the authorization in step 6. If the token is missing or the lookup fails, the
+message is posted without the Project field.
 
 Todoist signs the raw request body with the app's client secret, which is why
 the Webhook node keeps the raw body and the Code node parses it itself.
@@ -122,8 +136,9 @@ Completions of recurring tasks are posted like any other; Todoist sends
    account, then Workflows > Import from File > `todoist-discord.json`, and
    publish the workflow.
 5. Back in the Todoist app console, under Webhooks, set the callback URL to
-   `https://hooks.noelmiller.dev/webhook/todoist`, select `item:added` and
-   `item:completed`, and activate the webhook.
+   `https://hooks.noelmiller.dev/webhook/todoist`, select `item:added`,
+   `item:updated`, `item:completed`, and `item:deleted`, and activate the
+   webhook.
 6. Todoist only delivers webhooks for users who authorized the app through
    OAuth; the console's test token does not count. Authorize once: open
 
@@ -138,7 +153,23 @@ Completions of recurring tasks are posted like any other; Todoist sends
      -d client_id=CLIENT_ID -d client_secret=CLIENT_SECRET -d code=CODE
    ```
 
-   The returned token is not needed; the authorization is what matters.
+   The authorization is what makes Todoist deliver webhooks. The returned
+   `access_token` is read-only and is what the workflow uses to look up
+   project names; add it to the existing SealedSecret without re-entering the
+   other values, then commit the file:
+
+   ```sh
+   read -rs "todoist_token?Todoist access token: "; echo
+   kubectl create secret generic n8n-todoist-discord \
+     --namespace n8n \
+     --from-literal=todoist-api-token="$todoist_token" \
+     --dry-run=client -o yaml |
+     kubeseal --format yaml \
+       --controller-name sealed-secrets \
+       --controller-namespace kube-system \
+       --merge-into 16-n8n/sealed-n8n-todoist-discord.yaml
+   unset todoist_token
+   ```
 
 The workflow in git is the source of truth only by convention: n8n stores the
 live copy in PostgreSQL. After editing it in the browser, download it
@@ -146,7 +177,8 @@ live copy in PostgreSQL. After editing it in the browser, download it
 
 ## Rotating credentials
 The Todoist client secret and the Discord webhook URL are rotated by
-repeating step 3 and restarting n8n (`kubectl -n n8n rollout restart
+repeating step 3 (then step 6 again, since sealing from scratch drops the API
+token) and restarting n8n (`kubectl -n n8n rollout restart
 deploy/n8n`), since both are read from the environment.
 
 Do not rotate `n8n-encryption-key`: credentials saved in n8n are encrypted
