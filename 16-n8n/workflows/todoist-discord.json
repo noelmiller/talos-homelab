@@ -1,0 +1,127 @@
+{
+  "id": "TodoistDiscord01",
+  "name": "Todoist to Discord",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "todoist",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "5a1f4c1e-7c0b-4f57-9a35-1d2c0e6b7a01",
+      "name": "Todoist webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "7e0e3f0a-3f5e-4f0e-9a44-6c5d1b2a9f10"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\nconst EVENTS = {\n  'item:added': { title: 'Task added', color: 0x3b82f6 },\n  'item:completed': { title: 'Task completed', color: 0x22c55e },\n};\n\n// Todoist signs the raw request body, so verify before parsing anything.\nconst raw = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst given = Buffer.from($input.first().json.headers['x-todoist-hmac-sha256'] ?? '');\nconst secret = $env.TODOIST_CLIENT_SECRET;\nif (!secret) throw new Error('TODOIST_CLIENT_SECRET is not set');\nconst expected = Buffer.from(crypto.createHmac('sha256', secret).update(raw).digest('base64'));\nif (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {\n  return [{ json: { status: 401, reply: 'bad signature' } }];\n}\n\nconst { event_name, event_data: item } = JSON.parse(raw.toString('utf8'));\nconst ev = EVENTS[event_name];\nif (!ev) return [{ json: { status: 200, reply: 'ignored' } }];\n\nconst fields = [];\nif (item.due?.string) fields.push({ name: 'Due', value: item.due.string, inline: true });\n// Todoist API priority is inverted: 4 = p1, 1 = p4\nif (item.priority > 1) fields.push({ name: 'Priority', value: `p${5 - item.priority}`, inline: true });\n\nreturn [{\n  json: {\n    status: 200,\n    reply: 'sent',\n    discord: {\n      embeds: [{\n        title: ev.title,\n        description: item.content,\n        url: `https://app.todoist.com/app/task/${item.id}`,\n        color: ev.color,\n        fields,\n        timestamp: new Date().toISOString(),\n      }],\n    },\n  },\n}];"
+      },
+      "id": "5a1f4c1e-7c0b-4f57-9a35-1d2c0e6b7a02",
+      "name": "Verify and format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.discord }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5a1f4c1e-7c0b-4f57-9a35-1d2c0e6b7a03",
+      "name": "Has message",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.discord) }}",
+        "options": {}
+      },
+      "id": "5a1f4c1e-7c0b-4f57-9a35-1d2c0e6b7a04",
+      "name": "Post to Discord",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, -100]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "sent",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "5a1f4c1e-7c0b-4f57-9a35-1d2c0e6b7a05",
+      "name": "Reply sent",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [880, -100]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.reply }}",
+        "options": {
+          "responseCode": "={{ $json.status }}"
+        }
+      },
+      "id": "5a1f4c1e-7c0b-4f57-9a35-1d2c0e6b7a06",
+      "name": "Reply without sending",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [660, 100]
+    }
+  ],
+  "connections": {
+    "Todoist webhook": {
+      "main": [[{ "node": "Verify and format", "type": "main", "index": 0 }]]
+    },
+    "Verify and format": {
+      "main": [[{ "node": "Has message", "type": "main", "index": 0 }]]
+    },
+    "Has message": {
+      "main": [
+        [{ "node": "Post to Discord", "type": "main", "index": 0 }],
+        [{ "node": "Reply without sending", "type": "main", "index": 0 }]
+      ]
+    },
+    "Post to Discord": {
+      "main": [[{ "node": "Reply sent", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

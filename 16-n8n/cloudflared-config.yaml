@@ -1,0 +1,10 @@
+# cloudflared ingress rules for the n8n webhook tunnel. The tunnel ID is passed
+# on the command line from the sealed credentials, so it does not appear here.
+credentials-file: /etc/cloudflared/credentials/credentials.json
+ingress:
+  # Production webhooks only. The editor, REST API, /metrics, and the editor's
+  # /webhook-test/ URLs stay LAN-only behind n8n.k8s.noelmiller.dev.
+  - hostname: hooks.noelmiller.dev
+    path: ^/webhook/
+    service: http://n8n.n8n.svc.cluster.local:5678
+  - service: http_status:404
