@@ -10,7 +10,7 @@ webhooks are published to the internet at
 - `namespace.yaml`: `n8n` namespace, `restricted` Pod Security.
 - `sealed-n8n-postgresql.yaml`: sealed PostgreSQL credentials (`password`, `postgres-password`).
 - `sealed-n8n-encryption-key.yaml`: sealed `N8N_ENCRYPTION_KEY` (`encryption-key`), which encrypts the credentials saved in n8n.
-- `sealed-n8n-todoist-discord.yaml`: sealed inputs of the Todoist workflow (`todoist-client-secret`, `discord-webhook-url`, `todoist-api-token`).
+- `sealed-n8n-todoist-discord.yaml`: sealed inputs of the Todoist workflow (`todoist-client-secret`, `discord-webhook-url`).
 - `sealed-n8n-discord-project-webhooks.yaml`: sealed map of Todoist project name to Discord webhook URL (`project-webhooks`, one JSON object), written by `seal-project-webhook.sh`. Optional.
 - `seal-project-webhook.sh`: adds, replaces, or removes entries in that map and reseals it.
 - `sealed-n8n-discord-interactions.yaml`: sealed Discord application public key and server ID for the `/tasks` command (`public-key`, `guild-id`), written by `setup-discord-command.sh`. Optional.
@@ -21,6 +21,7 @@ webhooks are published to the internet at
 - `n8n-route.yaml`: `HTTPRoute` for `n8n.k8s.noelmiller.dev` on `main-gateway`.
 - `cloudflared.yaml`: `cloudflared` Deployment for the webhook tunnel and a PodMonitor for its metrics.
 - `cloudflared-config.yaml`: the tunnel's ingress rules, mounted through a hashed ConfigMap.
+- `credentials/todoist-oauth2.json`: the n8n OAuth2 credential for the Todoist API with every field but the client ID and secret filled in (see below). No secrets.
 - `workflows/todoist-discord.json`: the Todoist to Discord workflow, imported by hand (see below). Not applied by Argo CD.
 - `workflows/discord-tasks.json`: the `/tasks` slash command workflow, imported the same way.
 
@@ -104,13 +105,14 @@ a task is completed or uncompleted and for every occurrence of a recurring
 task (`update_intent` other than `item_updated`); those are dropped because
 they have their own events. For a real edit the payload carries the previous
 version of the task, and the embed lists what changed (content, due date,
-priority, labels, description, project, assignee) as `old → new`. An update with none of
-those, such as a drag to reorder, is dropped.
+priority, labels, description, project, assignee) as `old → new`. An update
+with none of those, such as a drag to reorder, is dropped.
 
-The project lookup uses `TODOIST_API_TOKEN`, the `data:read` OAuth token from
-the authorization in step 6. One request lists every project, which gives the
-names, and the parents that channel routing walks up. If the token is missing
-or the lookup fails, the message is posted to the default channel.
+The Todoist API calls are HTTP Request nodes that use the `Todoist (read-only)`
+OAuth2 credential (see "Todoist API access" below). One request lists every
+project, which gives the names, and the parents that channel routing walks
+up. If the credential is not connected or the lookup fails, the message is
+posted to the default channel.
 
 An assigned task shows an "Assigned to" field; unassigned tasks show nothing.
 The name comes from the project's collaborators, fetched only when a task has
@@ -153,7 +155,8 @@ Completions of recurring tasks are posted like any other; Todoist sends
 
 ### Setup
 1. In the [Todoist app console](https://developer.todoist.com/appconsole.html),
-   create an app. The OAuth redirect URL can be `https://localhost/callback`.
+   create an app. Set the OAuth redirect URL to
+   `https://n8n.k8s.noelmiller.dev/rest/oauth2-credential/callback`.
 2. In the Discord channel: Edit Channel > Integrations > Webhooks > New
    Webhook, and copy its URL. Treat the URL as a secret; it is the whole
    posting credential.
@@ -179,37 +182,39 @@ Completions of recurring tasks are posted like any other; Todoist sends
    `https://hooks.noelmiller.dev/webhook/todoist`, select `item:added`,
    `item:updated`, `item:completed`, and `item:deleted`, and activate the
    webhook.
-6. Todoist only delivers webhooks for users who authorized the app through
-   OAuth; the console's test token does not count. Authorize once: open
+6. Connect the Todoist credential (next section). Todoist only delivers
+   webhooks for users who authorized the app through OAuth, and the console's
+   test token does not count; connecting the credential is that authorization.
 
-   ```
-   https://todoist.com/oauth/authorize?client_id=CLIENT_ID&scope=data:read&state=x
-   ```
+## Todoist API access
+Apps created in the Todoist console today get one-hour access tokens and a
+refresh token that is replaced on every use, and that cannot be turned off.
+A token sealed into a Secret therefore stops working within the hour. Both
+workflows instead use an n8n OAuth2 credential, `Todoist (read-only)`: n8n
+refreshes the access token when Todoist answers 401, stores the rotated
+refresh token, and keeps both encrypted with `N8N_ENCRYPTION_KEY` in
+PostgreSQL. The scope is `data:read`, so nothing in n8n can change tasks.
 
-   approve, copy `code` from the redirect URL, and exchange it:
+`credentials/todoist-oauth2.json` holds everything but the client ID and
+secret, under a fixed ID that the workflow files refer to, so importing a
+workflow needs no credential to be re-selected. Create it once:
 
-   ```sh
-   curl -X POST https://todoist.com/oauth/access_token \
-     -d client_id=CLIENT_ID -d client_secret=CLIENT_SECRET -d code=CODE
-   ```
+```sh
+kubectl -n n8n exec -i deploy/n8n -- sh -c \
+  'cat > /tmp/c.json && n8n import:credentials --input=/tmp/c.json; rm -f /tmp/c.json' \
+  < 16-n8n/credentials/todoist-oauth2.json
+```
 
-   The authorization is what makes Todoist deliver webhooks. The returned
-   `access_token` is read-only and is what the workflow uses to look up
-   project names; add it to the existing SealedSecret without re-entering the
-   other values, then commit the file:
+Then in the editor: Credentials > `Todoist (read-only)` > paste the app's
+Client ID and Client Secret > Connect my account > Agree > Save. The redirect
+goes to `n8n.k8s.noelmiller.dev`, so do this from the LAN. Running the import
+again resets the credential to its unconnected state.
 
-   ```sh
-   read -rs "todoist_token?Todoist access token: "; echo
-   kubectl create secret generic n8n-todoist-discord \
-     --namespace n8n \
-     --from-literal=todoist-api-token="$todoist_token" \
-     --dry-run=client -o yaml |
-     kubeseal --format yaml \
-       --controller-name sealed-secrets \
-       --controller-namespace kube-system \
-       --merge-into 16-n8n/sealed-n8n-todoist-discord.yaml
-   unset todoist_token
-   ```
+If the credential ever needs reconnecting (messages arrive in the default
+channel without a Project field, `/tasks` answers "Could not reach Todoist"),
+open it and press Reconnect. A refresh token presented twice more than a
+minute apart makes Todoist revoke every token of the app; two executions
+racing to refresh at the same moment are within that minute.
 
 ## Listing tasks from Discord
 `workflows/discord-tasks.json` answers a `/tasks` slash command with the open
@@ -238,7 +243,8 @@ HTTP Request that edits the reply.
   longer than an embed holds ends with "and N more". Sub-projects are not
   included. The title names the project only when it was asked for with
   `project:`; in the project's own channel it is just the count.
-- It reads Todoist with the same `data:read` token, so it cannot change tasks.
+- It reads Todoist through the same `data:read` credential, so it cannot change
+  tasks.
 
 ### Setup
 1. In the [Discord developer portal](https://discord.com/developers/applications),
@@ -264,9 +270,9 @@ the live copy in PostgreSQL. After editing one in the browser, download it
 
 ## Rotating credentials
 The Todoist client secret and the Discord webhook URL are rotated by
-repeating step 3 (then step 6 again, since sealing from scratch drops the API
-token) and restarting n8n (`kubectl -n n8n rollout restart
-deploy/n8n`), since both are read from the environment.
+repeating step 3 and restarting n8n (`kubectl -n n8n rollout restart
+deploy/n8n`), since both are read from the environment. A new client secret
+also goes into the `Todoist (read-only)` credential, followed by Reconnect.
 
 Do not rotate `n8n-encryption-key`: credentials saved in n8n are encrypted
 with it and become unreadable. The PostgreSQL passwords are only applied when

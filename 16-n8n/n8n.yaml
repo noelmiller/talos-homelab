@@ -111,14 +111,6 @@ spec:
                 secretKeyRef:
                   name: n8n-todoist-discord
                   key: discord-webhook-url
-            # Read-only OAuth token used to look up project names. Optional:
-            # without it the workflow still posts, minus the Project field.
-            - name: TODOIST_API_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: n8n-todoist-discord
-                  key: todoist-api-token
-                  optional: true
             # JSON object of Todoist project name -> Discord webhook URL, one
             # per channel (seal-project-webhook.sh). Projects not listed, and
             # everything when this is absent, go to DISCORD_WEBHOOK_URL. Read

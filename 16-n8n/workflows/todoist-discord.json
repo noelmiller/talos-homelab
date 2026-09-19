@@ -23,7 +23,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const crypto = require('crypto');\n\nconst EVENTS = ['item:added', 'item:updated', 'item:completed', 'item:deleted'];\nconst ignored = (why) => [{ json: { status: 200, reply: `ignored: ${why}` } }];\n\n// Todoist signs the raw request body, so verify before parsing anything.\nconst raw = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst given = Buffer.from($input.first().json.headers['x-todoist-hmac-sha256'] ?? '');\nconst secret = $env.TODOIST_CLIENT_SECRET;\nif (!secret) throw new Error('TODOIST_CLIENT_SECRET is not set');\nconst expected = Buffer.from(crypto.createHmac('sha256', secret).update(raw).digest('base64'));\nif (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {\n  return [{ json: { status: 401, reply: 'bad signature' } }];\n}\n\nconst { event_name, event_data: item, event_data_extra: extra } = JSON.parse(raw.toString('utf8'));\nif (!EVENTS.includes(event_name)) return ignored(event_name);\n\n// Todoist API priority is inverted: 4 = p1, 1 = p4\nconst prio = (p) => `p${5 - (p ?? 1)}`;\nconst due = (d) => d?.string || d?.date || 'none';\nconst labels = (l) => (l?.length ? l.join(', ') : 'none');\nconst clip = (s, n = 300) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);\n// Older webhook payloads carry numeric ids plus v2_* ids; the API wants the latter.\nconst projectId = (i) => i?.v2_project_id ?? i?.project_id;\n\nconst changes = [];\nif (event_name === 'item:updated') {\n  // Completing, uncompleting, and every occurrence of a recurring task also\n  // send item:updated; those have their own events.\n  const intent = extra?.update_intent;\n  if (intent && intent !== 'item_updated') return ignored(`update_intent ${intent}`);\n\n  const old = extra?.old_item;\n  if (old) {\n    const diff = (name, a, b) => { if (a !== b) changes.push({ name, value: clip(`${a} → ${b}`), inline: false }); };\n    diff('Content', old.content, item.content);\n    diff('Due', due(old.due), due(item.due));\n    diff('Priority', prio(old.priority), prio(item.priority));\n    diff('Labels', labels(old.labels), labels(item.labels));\n    if ((old.description ?? '') !== (item.description ?? '')) changes.push({ name: 'Description', value: 'changed', inline: false });\n    if (projectId(old) !== projectId(item)) changes.push({ name: 'Moved', value: 'from another project', inline: false });\n    // Names are resolved later, where the collaborators are looked up.\n    if ((old.responsible_uid ?? null) !== (item.responsible_uid ?? null)) changes.push({ name: 'Assigned to', from: old.responsible_uid ?? null, to: item.responsible_uid ?? null, inline: false });\n    // Reordering, collapsing, and similar edits are not worth a message.\n    if (!changes.length) return ignored('no visible change');\n  }\n}\n\nreturn [{ json: { status: 200, event_name, item, changes, project_id: projectId(item) ?? '' } }];"
+        "jsCode": "const crypto = require('crypto');\n\nconst EVENTS = ['item:added', 'item:updated', 'item:completed', 'item:deleted'];\nconst ignored = (why) => [{ json: { status: 200, reply: `ignored: ${why}` } }];\n\n// Todoist signs the raw request body, so verify before parsing anything.\nconst raw = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst given = Buffer.from($input.first().json.headers['x-todoist-hmac-sha256'] ?? '');\nconst secret = $env.TODOIST_CLIENT_SECRET;\nif (!secret) throw new Error('TODOIST_CLIENT_SECRET is not set');\nconst expected = Buffer.from(crypto.createHmac('sha256', secret).update(raw).digest('base64'));\nif (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {\n  return [{ json: { status: 401, reply: 'bad signature' } }];\n}\n\nconst { event_name, event_data: item, event_data_extra: extra } = JSON.parse(raw.toString('utf8'));\nif (!EVENTS.includes(event_name)) return ignored(event_name);\n\n// Todoist API priority is inverted: 4 = p1, 1 = p4\nconst prio = (p) => `p${5 - (p ?? 1)}`;\nconst due = (d) => d?.string || d?.date || 'none';\nconst labels = (l) => (l?.length ? l.join(', ') : 'none');\nconst clip = (s, n = 300) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);\n// Older webhook payloads carry numeric ids plus v2_* ids; the API wants the latter.\nconst projectId = (i) => i?.v2_project_id ?? i?.project_id;\n\nconst changes = [];\nif (event_name === 'item:updated') {\n  // Completing, uncompleting, and every occurrence of a recurring task also\n  // send item:updated; those have their own events.\n  const intent = extra?.update_intent;\n  if (intent && intent !== 'item_updated') return ignored(`update_intent ${intent}`);\n\n  const old = extra?.old_item;\n  if (old) {\n    const diff = (name, a, b) => { if (a !== b) changes.push({ name, value: clip(`${a} → ${b}`), inline: false }); };\n    diff('Content', old.content, item.content);\n    diff('Due', due(old.due), due(item.due));\n    diff('Priority', prio(old.priority), prio(item.priority));\n    diff('Labels', labels(old.labels), labels(item.labels));\n    if ((old.description ?? '') !== (item.description ?? '')) changes.push({ name: 'Description', value: 'changed', inline: false });\n    if (projectId(old) !== projectId(item)) changes.push({ name: 'Moved', value: 'from another project', inline: false });\n    // Names are resolved later, where the collaborators are looked up.\n    if ((old.responsible_uid ?? null) !== (item.responsible_uid ?? null)) changes.push({ name: 'Assigned to', from: old.responsible_uid ?? null, to: item.responsible_uid ?? null, inline: false });\n    // Reordering, collapsing, and similar edits are not worth a message.\n    if (!changes.length) return ignored('no visible change');\n  }\n}\n\n// Only shared projects have assignees, so most events skip the collaborator lookup.\nconst needs_people = Boolean(item.responsible_uid) || changes.some((c) => c.name === 'Assigned to');\nreturn [{ json: { status: 200, event_name, item, changes, project_id: projectId(item) ?? '', needs_people } }];"
       },
       "id": "5a1f4c1e-7c0b-4f57-9a35-1d2c0e6b7a02",
       "name": "Verify and parse",
@@ -71,17 +71,10 @@
     {
       "parameters": {
         "url": "https://api.todoist.com/api/v1/projects?limit=200",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $env.TODOIST_API_TOKEN }}"
-            }
-          ]
-        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
         "options": {
-          "timeout": 5000
+          "timeout": 8000
         }
       },
       "id": "5a1f4c1e-7c0b-4f57-9a35-1d2c0e6b7a07",
@@ -92,18 +85,83 @@
         660,
         -100
       ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "TodoistOAuth2001",
+          "name": "Todoist (read-only)"
+        }
+      },
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "const STYLE = {\n  'item:added': { title: 'Task added', color: 0x3b82f6 },\n  'item:updated': { title: 'Task updated', color: 0xf59e0b },\n  'item:completed': { title: 'Task completed', color: 0x22c55e },\n  'item:deleted': { title: 'Task deleted', color: 0xef4444 },\n};\n\nconst { event_name, item, changes, project_id } = $('Verify and parse').first().json;\nconst style = STYLE[event_name];\n\n// Walk from the task's project up through its parents. Empty when the lookup\n// failed or no API token is configured.\nconst byId = new Map(($input.first().json.results ?? []).map((p) => [p.id, p]));\nconst chain = [];\nfor (let p = byId.get(project_id); p && chain.length < 10; p = byId.get(p.parent_id)) chain.push(p);\nconst project = chain.map((p) => p.name).reverse().join(' / ');\n\n// {\"Project name\": \"https://discord.com/api/webhooks/...\"}; the nearest mapped\n// project wins, so sub-projects inherit. Everything else goes to the default.\nlet channels = {};\ntry {\n  const parsed = JSON.parse($env.DISCORD_PROJECT_WEBHOOKS || '{}');\n  for (const [name, url] of Object.entries(parsed)) channels[name.trim().toLowerCase()] = url;\n} catch (e) {\n  channels = {};\n}\nconst mapped = chain.find((p) => channels[p.name.trim().toLowerCase()]);\nconst webhook_url = mapped ? channels[mapped.name.trim().toLowerCase()] : $env.DISCORD_WEBHOOK_URL;\n\n// Assignee names come from the project's collaborators; only shared projects\n// have assignees, so most events skip the request.\nconst assigneeChange = changes.find((c) => c.name === 'Assigned to');\nconst uids = [item.responsible_uid, assigneeChange?.from, assigneeChange?.to].filter(Boolean).map(String);\nconst people = new Map();\nif (uids.length && project_id) {\n  try {\n    const r = await this.helpers.httpRequest({\n      url: `https://api.todoist.com/api/v1/projects/${encodeURIComponent(project_id)}/collaborators?limit=200`,\n      headers: { Authorization: `Bearer ${$env.TODOIST_API_TOKEN}` },\n      json: true,\n      timeout: 5000,\n    });\n    for (const c of r.results ?? r) people.set(String(c.id), c.name);\n  } catch (e) {\n    // Post without names rather than not at all.\n  }\n}\nconst person = (uid) => (uid ? people.get(String(uid)) ?? 'someone' : 'nobody');\n\nconst fields = [];\n// In a project's own channel the project is redundant; in the default channel\n// it is the only thing that says where the task lives.\nif (project && !mapped) fields.push({ name: 'Project', value: project, inline: true });\nif (item.responsible_uid && !assigneeChange) fields.push({ name: 'Assigned to', value: person(item.responsible_uid), inline: true });\nif (event_name === 'item:updated' && changes.length) {\n  fields.push(...changes.map((c) => (c === assigneeChange\n    ? { name: c.name, value: `${person(c.from)} → ${person(c.to)}`, inline: false }\n    : c)));\n} else {\n  if (item.due?.string) fields.push({ name: 'Due', value: item.due.string, inline: true });\n  // Todoist API priority is inverted: 4 = p1, 1 = p4\n  if (item.priority > 1) fields.push({ name: 'Priority', value: `p${5 - item.priority}`, inline: true });\n}\n\nconst embed = {\n  title: style.title,\n  description: (item.content ?? '').slice(0, 2000),\n  color: style.color,\n  fields,\n  timestamp: new Date().toISOString(),\n};\n// A deleted task has nothing to link to.\nif (event_name !== 'item:deleted') embed.url = `https://app.todoist.com/app/task/${item.v2_id ?? item.id}`;\n\nreturn [{ json: { webhook_url, discord: { embeds: [embed] } } }];"
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $('Verify and parse').first().json.needs_people }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5a1f4c1e-7c0b-4f57-9a35-1d2c0e6b7a09",
+      "name": "Has assignee",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.todoist.com/api/v1/projects/{{ $('Verify and parse').first().json.project_id }}/collaborators?limit=200",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 8000
+        }
+      },
+      "id": "5a1f4c1e-7c0b-4f57-9a35-1d2c0e6b7a10",
+      "name": "Get collaborators",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        -200
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "TodoistOAuth2001",
+          "name": "Todoist (read-only)"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const STYLE = {\n  'item:added': { title: 'Task added', color: 0x3b82f6 },\n  'item:updated': { title: 'Task updated', color: 0xf59e0b },\n  'item:completed': { title: 'Task completed', color: 0x22c55e },\n  'item:deleted': { title: 'Task deleted', color: 0xef4444 },\n};\n\nconst { event_name, item, changes, project_id } = $('Verify and parse').first().json;\nconst style = STYLE[event_name];\n\n// Walk from the task's project up through its parents. Empty when the lookup\n// failed, for instance before the Todoist credential is connected.\nconst byId = new Map(($('Get projects').first().json.results ?? []).map((p) => [p.id, p]));\nconst chain = [];\nfor (let p = byId.get(project_id); p && chain.length < 10; p = byId.get(p.parent_id)) chain.push(p);\nconst project = chain.map((p) => p.name).reverse().join(' / ');\n\n// {\"Project name\": \"https://discord.com/api/webhooks/...\"}; the nearest mapped\n// project wins, so sub-projects inherit. Everything else goes to the default.\nlet channels = {};\ntry {\n  const parsed = JSON.parse($env.DISCORD_PROJECT_WEBHOOKS || '{}');\n  for (const [name, url] of Object.entries(parsed)) channels[name.trim().toLowerCase()] = url;\n} catch (e) {\n  channels = {};\n}\nconst mapped = chain.find((p) => channels[p.name.trim().toLowerCase()]);\nconst webhook_url = mapped ? channels[mapped.name.trim().toLowerCase()] : $env.DISCORD_WEBHOOK_URL;\n\n// Assignee names come from the project's collaborators, fetched only when the\n// event involves an assignee.\nconst assigneeChange = changes.find((c) => c.name === 'Assigned to');\nconst people = new Map();\nif ($('Get collaborators').isExecuted) {\n  for (const c of $('Get collaborators').first().json.results ?? []) people.set(String(c.id), c.name);\n}\nconst person = (uid) => (uid ? people.get(String(uid)) ?? 'someone' : 'nobody');\n\nconst fields = [];\n// In a project's own channel the project is redundant; in the default channel\n// it is the only thing that says where the task lives.\nif (project && !mapped) fields.push({ name: 'Project', value: project, inline: true });\nif (item.responsible_uid && !assigneeChange) fields.push({ name: 'Assigned to', value: person(item.responsible_uid), inline: true });\nif (event_name === 'item:updated' && changes.length) {\n  fields.push(...changes.map((c) => (c === assigneeChange\n    ? { name: c.name, value: `${person(c.from)} → ${person(c.to)}`, inline: false }\n    : c)));\n} else {\n  if (item.due?.string) fields.push({ name: 'Due', value: item.due.string, inline: true });\n  // Todoist API priority is inverted: 4 = p1, 1 = p4\n  if (item.priority > 1) fields.push({ name: 'Priority', value: `p${5 - item.priority}`, inline: true });\n}\n\nconst embed = {\n  title: style.title,\n  description: (item.content ?? '').slice(0, 2000),\n  color: style.color,\n  fields,\n  timestamp: new Date().toISOString(),\n};\n// A deleted task has nothing to link to.\nif (event_name !== 'item:deleted') embed.url = `https://app.todoist.com/app/task/${item.v2_id ?? item.id}`;\n\nreturn [{ json: { webhook_url, discord: { embeds: [embed] } } }];"
       },
       "id": "5a1f4c1e-7c0b-4f57-9a35-1d2c0e6b7a08",
       "name": "Format",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        880,
+        1320,
         -100
       ]
     },
@@ -121,7 +179,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1100,
+        1540,
         -100
       ],
       "retryOnFail": true,
@@ -141,7 +199,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1320,
+        1760,
         -100
       ]
     },
@@ -205,6 +263,35 @@
       ]
     },
     "Get projects": {
+      "main": [
+        [
+          {
+            "node": "Has assignee",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has assignee": {
+      "main": [
+        [
+          {
+            "node": "Get collaborators",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get collaborators": {
       "main": [
         [
           {
