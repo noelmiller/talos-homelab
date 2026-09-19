@@ -70,7 +70,7 @@
     },
     {
       "parameters": {
-        "url": "=https://api.todoist.com/api/v1/projects/{{ $json.project_id }}",
+        "url": "https://api.todoist.com/api/v1/projects?limit=200",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -85,7 +85,7 @@
         }
       },
       "id": "5a1f4c1e-7c0b-4f57-9a35-1d2c0e6b7a07",
-      "name": "Get project",
+      "name": "Get projects",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -96,7 +96,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const STYLE = {\n  'item:added': { title: 'Task added', color: 0x3b82f6 },\n  'item:updated': { title: 'Task updated', color: 0xf59e0b },\n  'item:completed': { title: 'Task completed', color: 0x22c55e },\n  'item:deleted': { title: 'Task deleted', color: 0xef4444 },\n};\n\nconst { event_name, item, changes } = $('Verify and parse').first().json;\n// Empty when the lookup failed or no API token is configured.\nconst project = $input.first().json.name;\nconst style = STYLE[event_name];\n\nconst fields = [];\nif (project) fields.push({ name: 'Project', value: project, inline: true });\nif (event_name === 'item:updated' && changes.length) {\n  fields.push(...changes);\n} else {\n  if (item.due?.string) fields.push({ name: 'Due', value: item.due.string, inline: true });\n  // Todoist API priority is inverted: 4 = p1, 1 = p4\n  if (item.priority > 1) fields.push({ name: 'Priority', value: `p${5 - item.priority}`, inline: true });\n}\n\nconst embed = {\n  title: style.title,\n  description: (item.content ?? '').slice(0, 2000),\n  color: style.color,\n  fields,\n  timestamp: new Date().toISOString(),\n};\n// A deleted task has nothing to link to.\nif (event_name !== 'item:deleted') embed.url = `https://app.todoist.com/app/task/${item.v2_id ?? item.id}`;\n\nreturn [{ json: { discord: { embeds: [embed] } } }];"
+        "jsCode": "const STYLE = {\n  'item:added': { title: 'Task added', color: 0x3b82f6 },\n  'item:updated': { title: 'Task updated', color: 0xf59e0b },\n  'item:completed': { title: 'Task completed', color: 0x22c55e },\n  'item:deleted': { title: 'Task deleted', color: 0xef4444 },\n};\n\nconst { event_name, item, changes, project_id } = $('Verify and parse').first().json;\nconst style = STYLE[event_name];\n\n// Walk from the task's project up through its parents. Empty when the lookup\n// failed or no API token is configured.\nconst byId = new Map(($input.first().json.results ?? []).map((p) => [p.id, p]));\nconst chain = [];\nfor (let p = byId.get(project_id); p && chain.length < 10; p = byId.get(p.parent_id)) chain.push(p);\nconst project = chain.map((p) => p.name).reverse().join(' / ');\n\n// {\"Project name\": \"https://discord.com/api/webhooks/...\"}; the nearest mapped\n// project wins, so sub-projects inherit. Everything else goes to the default.\nlet channels = {};\ntry {\n  const parsed = JSON.parse($env.DISCORD_PROJECT_WEBHOOKS || '{}');\n  for (const [name, url] of Object.entries(parsed)) channels[name.trim().toLowerCase()] = url;\n} catch (e) {\n  channels = {};\n}\nconst mapped = chain.find((p) => channels[p.name.trim().toLowerCase()]);\nconst webhook_url = mapped ? channels[mapped.name.trim().toLowerCase()] : $env.DISCORD_WEBHOOK_URL;\n\nconst fields = [];\nif (project) fields.push({ name: 'Project', value: project, inline: true });\nif (event_name === 'item:updated' && changes.length) {\n  fields.push(...changes);\n} else {\n  if (item.due?.string) fields.push({ name: 'Due', value: item.due.string, inline: true });\n  // Todoist API priority is inverted: 4 = p1, 1 = p4\n  if (item.priority > 1) fields.push({ name: 'Priority', value: `p${5 - item.priority}`, inline: true });\n}\n\nconst embed = {\n  title: style.title,\n  description: (item.content ?? '').slice(0, 2000),\n  color: style.color,\n  fields,\n  timestamp: new Date().toISOString(),\n};\n// A deleted task has nothing to link to.\nif (event_name !== 'item:deleted') embed.url = `https://app.todoist.com/app/task/${item.v2_id ?? item.id}`;\n\nreturn [{ json: { webhook_url, discord: { embeds: [embed] } } }];"
       },
       "id": "5a1f4c1e-7c0b-4f57-9a35-1d2c0e6b7a08",
       "name": "Format",
@@ -110,7 +110,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
+        "url": "={{ $json.webhook_url }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json.discord) }}",
@@ -187,7 +187,7 @@
       "main": [
         [
           {
-            "node": "Get project",
+            "node": "Get projects",
             "type": "main",
             "index": 0
           }
@@ -201,7 +201,7 @@
         ]
       ]
     },
-    "Get project": {
+    "Get projects": {
       "main": [
         [
           {

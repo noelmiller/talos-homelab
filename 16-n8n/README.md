@@ -11,6 +11,8 @@ webhooks are published to the internet at
 - `sealed-n8n-postgresql.yaml`: sealed PostgreSQL credentials (`password`, `postgres-password`).
 - `sealed-n8n-encryption-key.yaml`: sealed `N8N_ENCRYPTION_KEY` (`encryption-key`), which encrypts the credentials saved in n8n.
 - `sealed-n8n-todoist-discord.yaml`: sealed inputs of the Todoist workflow (`todoist-client-secret`, `discord-webhook-url`, `todoist-api-token`).
+- `sealed-n8n-discord-project-webhooks.yaml`: sealed map of Todoist project name to Discord webhook URL (`project-webhooks`, one JSON object), written by `seal-project-webhook.sh`. Optional.
+- `seal-project-webhook.sh`: adds, replaces, or removes entries in that map and reseals it.
 - `sealed-cloudflared-credentials.yaml`: sealed tunnel credentials (`credentials.json`, `tunnel-id`).
 - `postgresql-values.yaml`: Bitnami PostgreSQL chart values (10Gi on `nvme-2tb`), image pinned to the same PostgreSQL 18 digest as Coder, Forgejo, and Keycloak, with the Velero `pg_dump` hook.
 - `n8n.yaml`: data PVC (5Gi on `nvme-2tb`), Deployment (1 replica, `Recreate`), Service (`5678`), and a ServiceMonitor for `/metrics`.
@@ -89,9 +91,9 @@ Todoist task is added, updated, completed, or deleted, with the name of its
 project:
 
 Webhook (`POST /webhook/todoist`, raw body) -> Code node that verifies
-`X-Todoist-Hmac-SHA256` and parses the event -> HTTP Request that looks the
-project name up in the Todoist API -> Code node that builds the embed -> HTTP
-Request to the Discord webhook -> `200 sent`. A bad or missing signature gets
+`X-Todoist-Hmac-SHA256` and parses the event -> HTTP Request that lists the
+projects from the Todoist API -> Code node that builds the embed and picks
+the channel -> HTTP Request to that Discord webhook -> `200 sent`. A bad or missing signature gets
 `401`; anything not relayed gets `200 ignored: <reason>`.
 
 `item:updated` is the noisy one, so it is filtered. Todoist also sends it when
@@ -103,8 +105,37 @@ priority, labels, description, project) as `old → new`. An update with none of
 those, such as a drag to reorder, is dropped.
 
 The project lookup uses `TODOIST_API_TOKEN`, the `data:read` OAuth token from
-the authorization in step 6. If the token is missing or the lookup fails, the
-message is posted without the Project field.
+the authorization in step 6. One request lists every project, which gives the
+name, and the parents for the `Work / Clients / Acme` path shown in the
+Project field. If the token is missing or the lookup fails, the message is
+posted to the default channel without the Project field.
+
+### A channel per project
+A Discord webhook belongs to one channel, so routing is a map of project name
+to webhook URL in `DISCORD_PROJECT_WEBHOOKS`. The nearest mapped project wins:
+a task in `Work / Clients / Acme` goes to Acme's channel if Acme is mapped,
+otherwise Clients', otherwise Work's. Names match without regard to case.
+Anything unmapped, Inbox and new projects included, goes to the default
+`DISCORD_WEBHOOK_URL`, so nothing is dropped. Renaming a project in Todoist
+sends it to the default channel until the map is updated.
+
+To add, replace, or remove a project, create the webhook in the target
+channel (Edit Channel > Integrations > Webhooks), then:
+
+```sh
+./16-n8n/seal-project-webhook.sh
+```
+
+It reads the current map from the live Secret (a SealedSecret cannot be
+decrypted locally), prompts for project names and hidden URLs, and rewrites
+`sealed-n8n-discord-project-webhooks.yaml`. Merge one run before starting the
+next. n8n reads the map at start-up, so after the merge:
+
+```sh
+kubectl -n n8n rollout restart deploy/n8n
+```
+
+The workflow itself does not change when the map does.
 
 Todoist signs the raw request body with the app's client secret, which is why
 the Webhook node keeps the raw body and the Code node parses it itself.
