@@ -1,0 +1,182 @@
+{
+  "id": "DiscordTasks0001",
+  "name": "Discord tasks command",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "discord",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a01",
+      "name": "Discord interaction",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "3b9d5c2e-6a41-4f7b-8e0d-9c1a2b3d4e5f"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\nconst reply = (status, body, command) => [{ json: { status, body, command } }];\n// Ephemeral: only the person who ran the command sees it.\nconst say = (content) => reply(200, { type: 4, data: { content, flags: 64 } });\n\n// Discord signs timestamp + raw body with the application's Ed25519 key, and\n// probes the endpoint with bad signatures, which must get a 401.\nconst raw = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst headers = $input.first().json.headers;\nconst signature = headers['x-signature-ed25519'] ?? '';\nconst timestamp = headers['x-signature-timestamp'] ?? '';\nconst publicKey = $env.DISCORD_PUBLIC_KEY;\nif (!publicKey) throw new Error('DISCORD_PUBLIC_KEY is not set');\n\nlet valid = false;\ntry {\n  // A raw 32-byte Ed25519 key behind the fixed SPKI prefix.\n  const key = crypto.createPublicKey({\n    key: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), Buffer.from(publicKey, 'hex')]),\n    format: 'der',\n    type: 'spki',\n  });\n  valid = /^[0-9a-f]{128}$/i.test(signature)\n    && Math.abs(Date.now() / 1000 - Number(timestamp)) < 300\n    && crypto.verify(null, Buffer.concat([Buffer.from(timestamp), raw]), key, Buffer.from(signature, 'hex'));\n} catch (e) {\n  valid = false;\n}\nif (!valid) return reply(401, { error: 'invalid request signature' });\n\nconst interaction = JSON.parse(raw.toString('utf8'));\nif (interaction.type === 1) return reply(200, { type: 1 }); // PING\n\nif ($env.DISCORD_GUILD_ID && interaction.guild_id !== $env.DISCORD_GUILD_ID) return say('This command is not available here.');\nif (interaction.type !== 2 || interaction.data?.name !== 'tasks') return say('Unknown command.');\n\n// Type 5 shows \"thinking...\" at once; the list follows as an edit of that\n// message, which lifts Discord's three-second limit on the reply.\nreturn reply(200, { type: 5 }, {\n  project: (interaction.data.options?.find((o) => o.name === 'project')?.value ?? '').trim(),\n  channel_id: interaction.channel_id,\n  application_id: interaction.application_id,\n  token: interaction.token,\n});"
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a02",
+      "name": "Verify",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "responseCode": "={{ $json.status }}"
+        }
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a03",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $('Verify').first().json.command }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a04",
+      "name": "Is command",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { project: wanted, channel_id } = $('Verify').first().json.command;\n\nconst http = (url, headers = {}) => this.helpers.httpRequest({ url, headers, json: true, timeout: 8000 });\nconst todoist = (path) => http(`https://api.todoist.com/api/v1${path}`, { Authorization: `Bearer ${$env.TODOIST_API_TOKEN}` });\n// Nothing typed into the command may ping anyone.\nconst send = (message) => [{ json: { message: { ...message, allowed_mentions: { parse: [] } } } }];\nconst norm = (s) => s.trim().toLowerCase();\n\nlet projects;\ntry {\n  projects = (await todoist('/projects?limit=200')).results ?? [];\n} catch (e) {\n  return send({ content: `Could not reach Todoist: ${e.message}` });\n}\nconst byId = new Map(projects.map((p) => [p.id, p]));\nconst path = (p) => {\n  const names = [];\n  for (let q = p; q && names.length < 10; q = byId.get(q.parent_id)) names.unshift(q.name);\n  return names.join(' / ');\n};\n\nlet project;\nif (wanted) {\n  project = projects.find((p) => norm(p.name) === norm(wanted)) ?? projects.find((p) => norm(path(p)) === norm(wanted));\n  if (!project) return send({ content: `No Todoist project named \"${wanted}\". Projects: ${projects.map((p) => p.name).join(', ')}` });\n} else {\n  // A webhook URL answers an unauthenticated GET with the channel it posts to,\n  // so the project -> webhook map also says which project this channel is.\n  let channels = {};\n  try {\n    channels = JSON.parse($env.DISCORD_PROJECT_WEBHOOKS || '{}');\n  } catch (e) {\n    channels = {};\n  }\n  const names = await Promise.all(Object.entries(channels).map(async ([name, url]) => {\n    try {\n      return (await http(url)).channel_id === channel_id ? name : null;\n    } catch (e) {\n      return null;\n    }\n  }));\n  const name = names.find(Boolean);\n  project = name && projects.find((p) => norm(p.name) === norm(name));\n  if (!project) return send({ content: 'This channel is not mapped to a Todoist project. Try `/tasks project:<name>`.' });\n}\n\nlet tasks;\ntry {\n  tasks = (await todoist(`/tasks?project_id=${encodeURIComponent(project.id)}&limit=200`)).results ?? [];\n} catch (e) {\n  return send({ content: `Could not list tasks: ${e.message}` });\n}\n\n// Only shared projects have assignees; skip the request otherwise.\nconst people = new Map();\nif (tasks.some((t) => t.responsible_uid)) {\n  try {\n    const r = await todoist(`/projects/${encodeURIComponent(project.id)}/collaborators?limit=200`);\n    for (const c of r.results ?? r) people.set(String(c.id), c.name);\n  } catch (e) {\n    // List without names rather than not at all.\n  }\n}\n\n// Soonest due first, undated last, then by priority (4 = p1) and list order.\ntasks.sort((a, b) => (a.due?.date ?? '9999').localeCompare(b.due?.date ?? '9999')\n  || (b.priority ?? 1) - (a.priority ?? 1)\n  || (a.child_order ?? 0) - (b.child_order ?? 0));\n\nconst lines = [];\nlet length = 0;\nfor (const t of tasks) {\n  const text = t.content.length > 150 ? `${t.content.slice(0, 149)}…` : t.content;\n  // Content that already holds a markdown link cannot be wrapped in another.\n  let line = text.includes('](') ? `• ${text}` : `• [${text}](https://app.todoist.com/app/task/${t.id})`;\n  if (t.due) line += ` — ${t.due.string || t.due.date}`;\n  if (t.priority > 1) line += ` · p${5 - t.priority}`;\n  if (t.responsible_uid) line += ` · ${people.get(String(t.responsible_uid)) ?? 'assigned'}`;\n  // An embed description holds 4096 characters.\n  if (length + line.length + 1 > 3900) break;\n  lines.push(line);\n  length += line.length + 1;\n}\nif (lines.length < tasks.length) lines.push(`…and ${tasks.length - lines.length} more`);\n\nreturn send({\n  embeds: [{\n    // Naming the project is redundant in its own channel, but not when it was\n    // asked for by name from somewhere else.\n    title: `${wanted ? `${path(project)}: ` : ''}${tasks.length} open ${tasks.length === 1 ? 'task' : 'tasks'}`,\n    url: `https://app.todoist.com/app/project/${project.id}`,\n    description: lines.join('\\n') || 'Nothing open.',\n    color: 0x3b82f6,\n    timestamp: new Date().toISOString(),\n  }],\n});"
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a05",
+      "name": "Build reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://discord.com/api/v10/webhooks/{{ $('Verify').first().json.command.application_id }}/{{ $('Verify').first().json.command.token }}/messages/@original",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.message) }}",
+        "options": {}
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a06",
+      "name": "Edit deferred reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        -100
+      ]
+    }
+  ],
+  "connections": {
+    "Discord interaction": {
+      "main": [
+        [
+          {
+            "node": "Verify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond": {
+      "main": [
+        [
+          {
+            "node": "Is command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is command": {
+      "main": [
+        [
+          {
+            "node": "Build reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Build reply": {
+      "main": [
+        [
+          {
+            "node": "Edit deferred reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

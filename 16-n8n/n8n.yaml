@@ -129,6 +129,22 @@ spec:
                   name: n8n-discord-project-webhooks
                   key: project-webhooks
                   optional: true
+            # The Discord application's Ed25519 public key, which verifies
+            # slash-command requests, and the one server allowed to send them
+            # (setup-discord-command.sh). Neither is a credential; they are
+            # sealed to keep the server ID out of a public repository.
+            - name: DISCORD_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: n8n-discord-interactions
+                  key: public-key
+                  optional: true
+            - name: DISCORD_GUILD_ID
+              valueFrom:
+                secretKeyRef:
+                  name: n8n-discord-interactions
+                  key: guild-id
+                  optional: true
           ports:
             - name: http
               containerPort: 5678

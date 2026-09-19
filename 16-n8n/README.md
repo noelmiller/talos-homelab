@@ -13,6 +13,8 @@ webhooks are published to the internet at
 - `sealed-n8n-todoist-discord.yaml`: sealed inputs of the Todoist workflow (`todoist-client-secret`, `discord-webhook-url`, `todoist-api-token`).
 - `sealed-n8n-discord-project-webhooks.yaml`: sealed map of Todoist project name to Discord webhook URL (`project-webhooks`, one JSON object), written by `seal-project-webhook.sh`. Optional.
 - `seal-project-webhook.sh`: adds, replaces, or removes entries in that map and reseals it.
+- `sealed-n8n-discord-interactions.yaml`: sealed Discord application public key and server ID for the `/tasks` command (`public-key`, `guild-id`), written by `setup-discord-command.sh`. Optional.
+- `setup-discord-command.sh`: registers the `/tasks` slash command in one server and writes that file.
 - `sealed-cloudflared-credentials.yaml`: sealed tunnel credentials (`credentials.json`, `tunnel-id`).
 - `postgresql-values.yaml`: Bitnami PostgreSQL chart values (10Gi on `nvme-2tb`), image pinned to the same PostgreSQL 18 digest as Coder, Forgejo, and Keycloak, with the Velero `pg_dump` hook.
 - `n8n.yaml`: data PVC (5Gi on `nvme-2tb`), Deployment (1 replica, `Recreate`), Service (`5678`), and a ServiceMonitor for `/metrics`.
@@ -20,6 +22,7 @@ webhooks are published to the internet at
 - `cloudflared.yaml`: `cloudflared` Deployment for the webhook tunnel and a PodMonitor for its metrics.
 - `cloudflared-config.yaml`: the tunnel's ingress rules, mounted through a hashed ConfigMap.
 - `workflows/todoist-discord.json`: the Todoist to Discord workflow, imported by hand (see below). Not applied by Argo CD.
+- `workflows/discord-tasks.json`: the `/tasks` slash command workflow, imported the same way.
 
 ## Runtime configuration
 Everything is passed as environment variables: the PostgreSQL connection,
@@ -87,8 +90,8 @@ Secret is committed.
 
 ## Todoist to Discord
 `workflows/todoist-discord.json` posts an embed to a Discord channel when a
-Todoist task is added, updated, completed, or deleted, with the name of its
-project:
+Todoist task is added, updated, completed, or deleted, with who it is
+assigned to:
 
 Webhook (`POST /webhook/todoist`, raw body) -> Code node that verifies
 `X-Todoist-Hmac-SHA256` and parses the event -> HTTP Request that lists the
@@ -101,14 +104,20 @@ a task is completed or uncompleted and for every occurrence of a recurring
 task (`update_intent` other than `item_updated`); those are dropped because
 they have their own events. For a real edit the payload carries the previous
 version of the task, and the embed lists what changed (content, due date,
-priority, labels, description, project) as `old → new`. An update with none of
+priority, labels, description, project, assignee) as `old → new`. An update with none of
 those, such as a drag to reorder, is dropped.
 
 The project lookup uses `TODOIST_API_TOKEN`, the `data:read` OAuth token from
 the authorization in step 6. One request lists every project, which gives the
-name, and the parents for the `Work / Clients / Acme` path shown in the
-Project field. If the token is missing or the lookup fails, the message is
-posted to the default channel without the Project field.
+names, and the parents that channel routing walks up. If the token is missing
+or the lookup fails, the message is posted to the default channel.
+
+An assigned task shows an "Assigned to" field; unassigned tasks show nothing.
+The name comes from the project's collaborators, fetched only when a task has
+an assignee, which only happens in shared projects. If that lookup fails the
+field says "someone". The Project field (`Work / Clients / Acme`) appears only
+in the default channel, where several projects mix; in a project's own channel
+it would be redundant.
 
 ### A channel per project
 A Discord webhook belongs to one channel, so routing is a map of project name
@@ -202,9 +211,56 @@ Completions of recurring tasks are posted like any other; Todoist sends
    unset todoist_token
    ```
 
-The workflow in git is the source of truth only by convention: n8n stores the
-live copy in PostgreSQL. After editing it in the browser, download it
-(Workflow menu > Download) over the file here.
+## Listing tasks from Discord
+`workflows/discord-tasks.json` answers a `/tasks` slash command with the open
+tasks of a Todoist project, as a message everyone in the channel can see.
+Discord delivers slash commands over HTTPS to an Interactions Endpoint URL,
+here `https://hooks.noelmiller.dev/webhook/discord`, so there is no bot
+process and no gateway connection.
+
+Webhook (`POST /webhook/discord`, raw body) -> Code node that verifies the
+request -> reply -> Code node that finds the project and lists its tasks ->
+HTTP Request that edits the reply.
+
+- Discord signs `timestamp + body` with the application's Ed25519 key. A bad
+  signature, or a timestamp more than five minutes off, gets `401`; Discord
+  probes for exactly that before it accepts the endpoint URL. Commands from
+  any server other than `DISCORD_GUILD_ID` are refused.
+- The first reply is "thinking..." (a deferred response) and the list is sent
+  as an edit of it, which lifts Discord's three-second limit on replies.
+- `/tasks` with no argument lists the project the channel is mapped to. A
+  webhook URL answers an unauthenticated `GET` with its channel ID, so the
+  project -> webhook map from the section above is also the channel ->
+  project map. `/tasks project:<name>` lists any project from any channel;
+  a path such as `Family / Trips` picks between sub-projects with the same
+  name.
+- Tasks are sorted by due date, then priority, and show their assignee. A list
+  longer than an embed holds ends with "and N more". Sub-projects are not
+  included. The title names the project only when it was asked for with
+  `project:`; in the project's own channel it is just the count.
+- It reads Todoist with the same `data:read` token, so it cannot change tasks.
+
+### Setup
+1. In the [Discord developer portal](https://discord.com/developers/applications),
+   create an application. Under Installation, keep only "Guild Install" and
+   the `applications.commands` scope, open the install link, and add it to
+   your server. No bot permissions are needed.
+2. Register the command and seal the public key and server ID. The bot token
+   (Bot > Reset Token) is used once for the registration call and not stored:
+   ```sh
+   ./16-n8n/setup-discord-command.sh
+   ```
+3. Commit `sealed-n8n-discord-interactions.yaml`, merge, and let the pod roll.
+4. In the n8n editor, import `workflows/discord-tasks.json` as a new workflow
+   and publish it.
+5. Only then set General Information > Interactions Endpoint URL to
+   `https://hooks.noelmiller.dev/webhook/discord`. Discord verifies the URL
+   when you save, so the workflow has to be live first.
+
+## Workflows in git
+The workflows in git are the source of truth only by convention: n8n stores
+the live copy in PostgreSQL. After editing one in the browser, download it
+(Workflow menu > Download) over its file here.
 
 ## Rotating credentials
 The Todoist client secret and the Discord webhook URL are rotated by
