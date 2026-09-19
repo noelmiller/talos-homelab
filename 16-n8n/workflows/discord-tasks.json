@@ -87,15 +87,137 @@
     },
     {
       "parameters": {
-        "jsCode": "const { project: wanted, channel_id } = $('Verify').first().json.command;\n\nconst http = (url, headers = {}) => this.helpers.httpRequest({ url, headers, json: true, timeout: 8000 });\nconst todoist = (path) => http(`https://api.todoist.com/api/v1${path}`, { Authorization: `Bearer ${$env.TODOIST_API_TOKEN}` });\n// Nothing typed into the command may ping anyone.\nconst send = (message) => [{ json: { message: { ...message, allowed_mentions: { parse: [] } } } }];\nconst norm = (s) => s.trim().toLowerCase();\n\nlet projects;\ntry {\n  projects = (await todoist('/projects?limit=200')).results ?? [];\n} catch (e) {\n  return send({ content: `Could not reach Todoist: ${e.message}` });\n}\nconst byId = new Map(projects.map((p) => [p.id, p]));\nconst path = (p) => {\n  const names = [];\n  for (let q = p; q && names.length < 10; q = byId.get(q.parent_id)) names.unshift(q.name);\n  return names.join(' / ');\n};\n\nlet project;\nif (wanted) {\n  project = projects.find((p) => norm(p.name) === norm(wanted)) ?? projects.find((p) => norm(path(p)) === norm(wanted));\n  if (!project) return send({ content: `No Todoist project named \"${wanted}\". Projects: ${projects.map((p) => p.name).join(', ')}` });\n} else {\n  // A webhook URL answers an unauthenticated GET with the channel it posts to,\n  // so the project -> webhook map also says which project this channel is.\n  let channels = {};\n  try {\n    channels = JSON.parse($env.DISCORD_PROJECT_WEBHOOKS || '{}');\n  } catch (e) {\n    channels = {};\n  }\n  const names = await Promise.all(Object.entries(channels).map(async ([name, url]) => {\n    try {\n      return (await http(url)).channel_id === channel_id ? name : null;\n    } catch (e) {\n      return null;\n    }\n  }));\n  const name = names.find(Boolean);\n  project = name && projects.find((p) => norm(p.name) === norm(name));\n  if (!project) return send({ content: 'This channel is not mapped to a Todoist project. Try `/tasks project:<name>`.' });\n}\n\nlet tasks;\ntry {\n  tasks = (await todoist(`/tasks?project_id=${encodeURIComponent(project.id)}&limit=200`)).results ?? [];\n} catch (e) {\n  return send({ content: `Could not list tasks: ${e.message}` });\n}\n\n// Only shared projects have assignees; skip the request otherwise.\nconst people = new Map();\nif (tasks.some((t) => t.responsible_uid)) {\n  try {\n    const r = await todoist(`/projects/${encodeURIComponent(project.id)}/collaborators?limit=200`);\n    for (const c of r.results ?? r) people.set(String(c.id), c.name);\n  } catch (e) {\n    // List without names rather than not at all.\n  }\n}\n\n// Soonest due first, undated last, then by priority (4 = p1) and list order.\ntasks.sort((a, b) => (a.due?.date ?? '9999').localeCompare(b.due?.date ?? '9999')\n  || (b.priority ?? 1) - (a.priority ?? 1)\n  || (a.child_order ?? 0) - (b.child_order ?? 0));\n\nconst lines = [];\nlet length = 0;\nfor (const t of tasks) {\n  const text = t.content.length > 150 ? `${t.content.slice(0, 149)}…` : t.content;\n  // Content that already holds a markdown link cannot be wrapped in another.\n  let line = text.includes('](') ? `• ${text}` : `• [${text}](https://app.todoist.com/app/task/${t.id})`;\n  if (t.due) line += ` — ${t.due.string || t.due.date}`;\n  if (t.priority > 1) line += ` · p${5 - t.priority}`;\n  if (t.responsible_uid) line += ` · ${people.get(String(t.responsible_uid)) ?? 'assigned'}`;\n  // An embed description holds 4096 characters.\n  if (length + line.length + 1 > 3900) break;\n  lines.push(line);\n  length += line.length + 1;\n}\nif (lines.length < tasks.length) lines.push(`…and ${tasks.length - lines.length} more`);\n\nreturn send({\n  embeds: [{\n    // Naming the project is redundant in its own channel, but not when it was\n    // asked for by name from somewhere else.\n    title: `${wanted ? `${path(project)}: ` : ''}${tasks.length} open ${tasks.length === 1 ? 'task' : 'tasks'}`,\n    url: `https://app.todoist.com/app/project/${project.id}`,\n    description: lines.join('\\n') || 'Nothing open.',\n    color: 0x3b82f6,\n    timestamp: new Date().toISOString(),\n  }],\n});"
+        "url": "https://api.todoist.com/api/v1/projects?limit=200",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 8000
+        }
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a07",
+      "name": "Get projects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        -100
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "TodoistOAuth2001",
+          "name": "Todoist"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const { project: wanted, channel_id } = $('Verify').first().json.command;\n\n// Nothing typed into the command may ping anyone.\nconst fail = (content) => [{ json: { message: { content, allowed_mentions: { parse: [] } } } }];\nconst norm = (s) => s.trim().toLowerCase();\n\nconst listed = $('Get projects').first().json;\nif (!Array.isArray(listed.results)) {\n  return fail(`Could not reach Todoist: ${listed.error?.message ?? 'no project list returned'}. Is the Todoist credential in n8n still connected?`);\n}\nconst projects = listed.results;\nconst byId = new Map(projects.map((p) => [p.id, p]));\nconst path = (p) => {\n  const names = [];\n  for (let q = p; q && names.length < 10; q = byId.get(q.parent_id)) names.unshift(q.name);\n  return names.join(' / ');\n};\n\nlet project;\nif (wanted) {\n  project = projects.find((p) => norm(p.name) === norm(wanted)) ?? projects.find((p) => norm(path(p)) === norm(wanted));\n  if (!project) return fail(`No Todoist project named \"${wanted}\". Projects: ${projects.map((p) => p.name).join(', ')}`);\n} else {\n  // A webhook URL answers an unauthenticated GET with the channel it posts to,\n  // so the project -> webhook map also says which project this channel is.\n  let channels = {};\n  try {\n    channels = JSON.parse($env.DISCORD_PROJECT_WEBHOOKS || '{}');\n  } catch (e) {\n    channels = {};\n  }\n  const names = await Promise.all(Object.entries(channels).map(async ([name, url]) => {\n    try {\n      return (await this.helpers.httpRequest({ url, json: true, timeout: 8000 })).channel_id === channel_id ? name : null;\n    } catch (e) {\n      return null;\n    }\n  }));\n  const name = names.find(Boolean);\n  project = name && projects.find((p) => norm(p.name) === norm(name));\n  if (!project) return fail('This channel is not mapped to a Todoist project. Try `/tasks project:<name>`.');\n}\n\n// Naming the project is redundant in its own channel, but not when it was\n// asked for by name from somewhere else.\nreturn [{ json: { project_id: project.id, title_prefix: wanted ? `${path(project)}: ` : '' } }];"
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a08",
+      "name": "Pick project",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.project_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a09",
+      "name": "Found project",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.todoist.com/api/v1/tasks?project_id={{ $('Pick project').first().json.project_id }}&limit=200",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 8000
+        }
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a10",
+      "name": "Get tasks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        -200
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "TodoistOAuth2001",
+          "name": "Todoist"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.todoist.com/api/v1/projects/{{ $('Pick project').first().json.project_id }}/collaborators?limit=200",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 8000
+        }
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a11",
+      "name": "Get collaborators",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        -200
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "TodoistOAuth2001",
+          "name": "Todoist"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const { project_id, title_prefix } = $('Pick project').first().json;\nconst send = (message) => [{ json: { message: { ...message, allowed_mentions: { parse: [] } } } }];\n\nconst listed = $('Get tasks').first().json;\nif (!Array.isArray(listed.results)) return send({ content: `Could not list tasks: ${listed.error?.message ?? 'no task list returned'}` });\nconst tasks = listed.results;\n\n// Empty when the lookup failed; tasks then say \"assigned\" instead of a name.\nconst people = new Map();\nfor (const c of $('Get collaborators').first().json.results ?? []) people.set(String(c.id), c.name);\n\n// Soonest due first, undated last, then by priority (4 = p1) and list order.\ntasks.sort((a, b) => (a.due?.date ?? '9999').localeCompare(b.due?.date ?? '9999')\n  || (b.priority ?? 1) - (a.priority ?? 1)\n  || (a.child_order ?? 0) - (b.child_order ?? 0));\n\nconst lines = [];\nlet length = 0;\nfor (const t of tasks) {\n  const text = t.content.length > 150 ? `${t.content.slice(0, 149)}…` : t.content;\n  // Content that already holds a markdown link cannot be wrapped in another.\n  let line = text.includes('](') ? `• ${text}` : `• [${text}](https://app.todoist.com/app/task/${t.id})`;\n  if (t.due) line += ` — ${t.due.string || t.due.date}`;\n  if (t.priority > 1) line += ` · p${5 - t.priority}`;\n  if (t.responsible_uid) line += ` · ${people.get(String(t.responsible_uid)) ?? 'assigned'}`;\n  // An embed description holds 4096 characters.\n  if (length + line.length + 1 > 3900) break;\n  lines.push(line);\n  length += line.length + 1;\n}\nif (lines.length < tasks.length) lines.push(`…and ${tasks.length - lines.length} more`);\n\nreturn send({\n  embeds: [{\n    title: `${title_prefix}${tasks.length} open ${tasks.length === 1 ? 'task' : 'tasks'}`,\n    url: `https://app.todoist.com/app/project/${project_id}`,\n    description: lines.join('\\n') || 'Nothing open.',\n    color: 0x3b82f6,\n    timestamp: new Date().toISOString(),\n  }],\n});"
       },
       "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e1a05",
       "name": "Build reply",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        880,
-        -100
+        1980,
+        -200
       ]
     },
     {
@@ -112,7 +234,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1100,
+        2200,
         -100
       ],
       "retryOnFail": true,
@@ -158,12 +280,74 @@
       "main": [
         [
           {
-            "node": "Build reply",
+            "node": "Get projects",
             "type": "main",
             "index": 0
           }
         ],
         []
+      ]
+    },
+    "Get projects": {
+      "main": [
+        [
+          {
+            "node": "Pick project",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick project": {
+      "main": [
+        [
+          {
+            "node": "Found project",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Found project": {
+      "main": [
+        [
+          {
+            "node": "Get tasks",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit deferred reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get tasks": {
+      "main": [
+        [
+          {
+            "node": "Get collaborators",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get collaborators": {
+      "main": [
+        [
+          {
+            "node": "Build reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build reply": {
