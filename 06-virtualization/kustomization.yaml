@@ -5,7 +5,7 @@ resources:
   - https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/v4.3.0/deployments/multus-daemonset-thick.yml
   - https://github.com/kubevirt/kubevirt/releases/download/v1.9.0/kubevirt-operator.yaml
   - kubevirt-cr.yaml
-  - https://github.com/kubevirt/containerized-data-importer/releases/download/v1.66.0/cdi-operator.yaml
+  - https://github.com/kubevirt/containerized-data-importer/releases/download/v1.66.1/cdi-operator.yaml
   - cdi-cr.yaml
   - storage-profiles.yaml
   - https://github.com/kubevirt-manager/kubevirt-manager/releases/download/v1.5.4/bundled-v1.5.4.yaml
