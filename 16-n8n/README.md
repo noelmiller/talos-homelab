@@ -207,9 +207,13 @@ kubectl -n n8n exec -i deploy/n8n -- sh -c \
   < 16-n8n/credentials/todoist-oauth2.json
 ```
 
-Then in the editor: Credentials > `Todoist` > paste the app's
-Client ID and Client Secret > Connect my account > Agree > Save. The redirect
-goes to `n8n.k8s.noelmiller.dev`, so do this from the LAN. Running the import
+Then in the editor: Overview > Credentials tab > `Todoist` (or
+`/home/credentials/TodoistOAuth2001`) > paste the app's Client ID and Client
+Secret > Connect my account > Agree, and close the dialog once it says
+"Account connected". Do not press Save afterwards: on n8n 2.39 that wrote the
+form back without the token that Connect had just stored, leaving a credential
+that looks connected and answers nothing. The redirect goes to
+`n8n.k8s.noelmiller.dev`, so do this from the LAN. Running the import
 again resets the credential to its unconnected state.
 
 If the credential ever needs reconnecting (messages arrive in the default
