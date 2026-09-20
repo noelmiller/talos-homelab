@@ -121,6 +121,34 @@ spec:
               value: preferred_username
             - name: OIDC_SCOPES
               value: openid profile email
+            # Outgoing mail (invitations, notifications, e-mail sign-in links)
+            # through the ISP's relay: submission port, upgraded with STARTTLS
+            # (SMTP_SECURE=true would mean implicit TLS on 465). The login and
+            # the From address, a mailbox the relay knows, are sealed.
+            - name: SMTP_HOST
+              value: smtp.midco.net
+            - name: SMTP_PORT
+              value: "587"
+            - name: SMTP_SECURE
+              value: "false"
+            # EHLO name; the default is the pod name, which is not a hostname.
+            - name: SMTP_NAME
+              value: outline.k8s.noelmiller.dev
+            - name: SMTP_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: outline-smtp
+                  key: username
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: outline-smtp
+                  key: password
+            - name: SMTP_FROM_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: outline-smtp
+                  key: from-email
             - name: DEFAULT_LANGUAGE
               value: en_US
             # No version check or anonymised statistics to the maintainers;
