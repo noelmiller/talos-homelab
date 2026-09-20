@@ -23,7 +23,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const crypto = require('crypto');\n\nconst reply = (status, body) => [{ json: { kind: 'respond', status, body } }];\n// Ephemeral: only the person who ran the command sees it.\nconst say = (content) => reply(200, { type: 4, data: { content, flags: 64 } });\n\n// Discord signs timestamp + raw body with the application's Ed25519 key, and\n// probes the endpoint with bad signatures, which must get a 401.\nconst raw = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst headers = $input.first().json.headers;\nconst signature = headers['x-signature-ed25519'] ?? '';\nconst timestamp = headers['x-signature-timestamp'] ?? '';\nconst publicKey = $env.DISCORD_PUBLIC_KEY;\nif (!publicKey) throw new Error('DISCORD_PUBLIC_KEY is not set');\n\nlet valid = false;\ntry {\n  // A raw 32-byte Ed25519 key behind the fixed SPKI prefix.\n  const key = crypto.createPublicKey({\n    key: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), Buffer.from(publicKey, 'hex')]),\n    format: 'der',\n    type: 'spki',\n  });\n  valid = /^[0-9a-f]{128}$/i.test(signature)\n    && Math.abs(Date.now() / 1000 - Number(timestamp)) < 300\n    && crypto.verify(null, Buffer.concat([Buffer.from(timestamp), raw]), key, Buffer.from(signature, 'hex'));\n} catch (e) {\n  valid = false;\n}\nif (!valid) return reply(401, { error: 'invalid request signature' });\n\nconst interaction = JSON.parse(raw.toString('utf8'));\nif (interaction.type === 1) return reply(200, { type: 1 }); // PING\n\nif ($env.DISCORD_GUILD_ID && interaction.guild_id !== $env.DISCORD_GUILD_ID) return say('This command is not available here.');\n\nconst name = interaction.data?.name;\nif (![2, 4].includes(interaction.type) || !['tasks', 'add', 'done'].includes(name)) return say('Unknown command.');\n\nconst given = interaction.data.options ?? [];\nconst command = {\n  name,\n  options: Object.fromEntries(given.map((o) => [o.name, typeof o.value === 'string' ? o.value.trim() : o.value])),\n  channel_id: interaction.channel_id,\n  application_id: interaction.application_id,\n  token: interaction.token,\n  // Todoist attributes everything done through the API to the account that\n  // connected the credential, so remember who asked.\n  who: interaction.member?.nick ?? interaction.member?.user?.global_name ?? interaction.member?.user?.username ?? 'someone',\n};\n\n// Type 4: Discord wants suggestions for the option being typed, answered\n// directly and within three seconds.\nif (interaction.type === 4) return [{ json: { kind: 'autocomplete', command: { ...command, focused: given.find((o) => o.focused)?.name } } }];\n\n// Type 5 shows \"thinking...\" at once; the result follows as an edit of that\n// message, which lifts Discord's three-second limit on the reply. The list is\n// public; confirmations of a change are for the caller only, because the relay\n// workflow announces the change to the channel anyway.\nreturn [{ json: { kind: 'command', status: 200, body: name === 'tasks' ? { type: 5 } : { type: 5, data: { flags: 64 } }, command } }];"
+        "jsCode": "const crypto = require('crypto');\n\nconst reply = (status, body) => [{ json: { kind: 'respond', status, body } }];\n// Ephemeral: only the person who ran the command sees it.\nconst say = (content) => reply(200, { type: 4, data: { content, flags: 64 } });\n\n// Discord signs timestamp + raw body with the application's Ed25519 key, and\n// probes the endpoint with bad signatures, which must get a 401.\nconst raw = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst headers = $input.first().json.headers;\nconst signature = headers['x-signature-ed25519'] ?? '';\nconst timestamp = headers['x-signature-timestamp'] ?? '';\nconst publicKey = $env.DISCORD_PUBLIC_KEY;\nif (!publicKey) throw new Error('DISCORD_PUBLIC_KEY is not set');\n\nlet valid = false;\ntry {\n  // A raw 32-byte Ed25519 key behind the fixed SPKI prefix.\n  const key = crypto.createPublicKey({\n    key: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), Buffer.from(publicKey, 'hex')]),\n    format: 'der',\n    type: 'spki',\n  });\n  valid = /^[0-9a-f]{128}$/i.test(signature)\n    && Math.abs(Date.now() / 1000 - Number(timestamp)) < 300\n    && crypto.verify(null, Buffer.concat([Buffer.from(timestamp), raw]), key, Buffer.from(signature, 'hex'));\n} catch (e) {\n  valid = false;\n}\nif (!valid) return reply(401, { error: 'invalid request signature' });\n\nconst interaction = JSON.parse(raw.toString('utf8'));\nif (interaction.type === 1) return reply(200, { type: 1 }); // PING\n\nif ($env.DISCORD_GUILD_ID && interaction.guild_id !== $env.DISCORD_GUILD_ID) return say('This command is not available here.');\n\n// Todoist attributes everything done through the API to the account that\n// connected the credential, so remember who asked.\nconst who = interaction.member?.nick ?? interaction.member?.user?.global_name ?? interaction.member?.user?.username ?? 'someone';\n\n// Type 3: someone pressed a button. Only this application can put buttons on\n// its messages, so the task id in custom_id is one the relay wrote.\nif (interaction.type === 3) {\n  const pressed = /^done:(.+)$/.exec(interaction.data?.custom_id ?? '');\n  if (!pressed) return say('Unknown button.');\n  return [{\n    json: {\n      kind: 'component',\n      component: {\n        task_id: pressed[1],\n        who,\n        application_id: interaction.application_id,\n        token: interaction.token,\n        message: { content: interaction.message?.content ?? '', components: interaction.message?.components ?? [] },\n      },\n    },\n  }];\n}\n\nconst name = interaction.data?.name;\nif (![2, 4].includes(interaction.type) || !['tasks', 'add', 'done'].includes(name)) return say('Unknown command.');\n\nconst given = interaction.data.options ?? [];\nconst command = {\n  name,\n  options: Object.fromEntries(given.map((o) => [o.name, typeof o.value === 'string' ? o.value.trim() : o.value])),\n  channel_id: interaction.channel_id,\n  application_id: interaction.application_id,\n  token: interaction.token,\n  who,\n};\n\n// Type 4: Discord wants suggestions for the option being typed, answered\n// directly and within three seconds.\nif (interaction.type === 4) return [{ json: { kind: 'autocomplete', command: { ...command, focused: given.find((o) => o.focused)?.name } } }];\n\n// Type 5 shows \"thinking...\" at once; the result follows as an edit of that\n// message, which lifts Discord's three-second limit on the reply. The list is\n// public. /add and /done answer privately, and the answer is deleted again on\n// success, because the relay workflow announces the change to the channel.\nreturn [{ json: { kind: 'command', status: 200, body: name === 'tasks' ? { type: 5 } : { type: 5, data: { flags: 64 } }, command } }];"
       },
       "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0002",
       "name": "Verify",
@@ -109,6 +109,30 @@
               },
               "renameOutput": true,
               "outputKey": "autocomplete"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r3",
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "component",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "component"
             }
           ]
         },
@@ -546,7 +570,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const created = $input.first().json;\nconst { assignee } = $('Prepare task').first().json;\nconst send = (content) => [{ json: { message: { content, allowed_mentions: { parse: [] } } } }];\n\nif (!created.id) return send(`Todoist did not accept the task: ${created.error?.message ?? 'no task returned'}`);\n\nlet line = `Added [${created.content}](https://app.todoist.com/app/task/${created.id})`;\nif (created.due) line += `, due ${created.due.string || created.due.date}`;\nif (created.priority > 1) line += `, p${5 - created.priority}`;\nif (assignee) line += `, assigned to ${assignee}`;\nreturn send(`${line}.`);"
+        "jsCode": "const created = $input.first().json;\nconst send = (content) => [{ json: { message: { content, allowed_mentions: { parse: [] } } } }];\n\nif (!created.id) return send(`Todoist did not accept the task: ${created.error?.message ?? 'no task returned'}`);\n\n// The relay announces the new task to the channel, so a confirmation here\n// would only repeat it. No message means the placeholder reply is deleted.\nreturn [{ json: { created: created.id } }];"
       },
       "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0016",
       "name": "Add reply",
@@ -657,7 +681,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const closed = $input.first().json;\nconst { content, recurring } = $('Find task').first().json;\nconst send = (text) => [{ json: { message: { content: text, allowed_mentions: { parse: [] } } } }];\n\nif (closed.error) return send(`Todoist did not complete \"${content}\": ${closed.error.message ?? 'unknown error'}`);\nreturn send(recurring ? `Completed \"${content}\"; it recurs, so it moves to its next date.` : `Completed \"${content}\".`);"
+        "jsCode": "const closed = $input.first().json;\nconst { content, recurring } = $('Find task').first().json;\nconst send = (text) => [{ json: { message: { content: text, allowed_mentions: { parse: [] } } } }];\n\nif (closed.error) return send(`Todoist did not complete \"${content}\": ${closed.error.message ?? 'unknown error'}`);\n// A recurring task only moves to its next date, which the relay does not\n// announce, so that case still gets a word. Otherwise the relay's line is the\n// confirmation and the placeholder reply is deleted.\nreturn recurring ? send(`Completed this occurrence of \"${content}\"; it moves to its next date.`) : [{ json: { closed: true } }];"
       },
       "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0021",
       "name": "Done reply",
@@ -763,6 +787,40 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.message }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0027",
+      "name": "Has message",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2640,
+        -300
+      ]
+    },
+    {
+      "parameters": {
         "method": "PATCH",
         "url": "=https://discord.com/api/v10/webhooks/{{ $('Verify').first().json.command.application_id }}/{{ $('Verify').first().json.command.token }}/messages/@original",
         "sendBody": true,
@@ -770,17 +828,163 @@
         "jsonBody": "={{ JSON.stringify($json.message) }}",
         "options": {}
       },
-      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0027",
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0028",
       "name": "Edit deferred reply",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2640,
+        2860,
+        -400
+      ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 2500
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "=https://discord.com/api/v10/webhooks/{{ $('Verify').first().json.command.application_id }}/{{ $('Verify').first().json.command.token }}/messages/@original",
+        "options": {}
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0029",
+      "name": "Delete deferred reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
         -200
       ],
       "retryOnFail": true,
       "maxTries": 4,
       "waitBetweenTries": 2500
+    },
+    {
+      "parameters": {
+        "url": "=https://api.todoist.com/api/v1/tasks/{{ $json.component.task_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 8000
+        }
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0030",
+      "name": "Get task (button)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        500
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "TodoistOAuth2001",
+          "name": "Todoist"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const { task_id, who, message } = $('Verify').first().json.component;\nconst task = $input.first().json;\n\n// The task's name, from Todoist if it still exists, else from the message:\n// \"<icon> [name](<url>) · details\" or \"<icon> name · details\".\nconst shown = message.content.replace(/^\\S+\\s+/, '');\nconst name = task.content ?? (/^\\[(.+?)\\]\\(<[^>]*>\\)/.exec(shown)?.[1] ?? shown.split(' · ')[0]).replace(/~~/g, '');\n\n// A retired message keeps its button, disabled, which is how the relay tells a\n// press from a completion made somewhere else.\nconst retired = (suffix) => ({\n  type: 7,\n  data: {\n    content: `✅ ~~${name}~~${suffix}`,\n    components: [{ type: 1, components: [{ type: 2, style: 2, label: 'Done', custom_id: `done:${task_id}`, disabled: true }] }],\n    allowed_mentions: { parse: [] },\n  },\n});\n\n// Answer first and complete afterwards: the message must already be retired\n// when Todoist's own webhook reaches the relay, or it would announce this too.\nif (!task.id || task.checked || task.is_deleted) return [{ json: { body: retired(''), close: false } }];\nif (task.due?.is_recurring) {\n  return [{ json: { body: { type: 4, data: { content: `Completing this occurrence of \"${name}\"; it comes back on its next date.`, flags: 64 } }, close: true, task_id, name, recurring: true } }];\n}\nreturn [{ json: { body: retired(` · ${who}`), close: true, task_id, name, recurring: false } }];"
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0031",
+      "name": "Button reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0032",
+      "name": "Respond to button",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $('Button reply').first().json.close }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0033",
+      "name": "Should close",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.todoist.com/api/v1/tasks/{{ $('Button reply').first().json.task_id }}/close",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 8000
+        },
+        "method": "POST"
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0034",
+      "name": "Close task (button)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        500
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "TodoistOAuth2001",
+          "name": "Todoist"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const closed = $input.first().json;\nif (!closed.error) return [{ json: { ok: true } }];\n\n// Todoist refused, so undo the optimistic answer and tell the person privately.\nconst { application_id, token, message } = $('Verify').first().json.component;\nconst { name, recurring } = $('Button reply').first().json;\nconst hook = `https://discord.com/api/v10/webhooks/${application_id}/${token}`;\nif (!recurring) {\n  await this.helpers.httpRequest({ method: 'PATCH', url: `${hook}/messages/@original`, json: true, body: { content: message.content, components: message.components, allowed_mentions: { parse: [] } } });\n}\nawait this.helpers.httpRequest({ method: 'POST', url: hook, json: true, body: { content: `Todoist did not complete \"${name}\": ${closed.error.message ?? 'unknown error'}`, flags: 64, allowed_mentions: { parse: [] } } });\nreturn [{ json: { ok: false } }];"
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0035",
+      "name": "After close",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        500
+      ]
     }
   ],
   "connections": {
@@ -825,6 +1029,13 @@
         [
           {
             "node": "Get projects",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get task (button)",
             "type": "main",
             "index": 0
           }
@@ -903,7 +1114,7 @@
         ],
         [
           {
-            "node": "Edit deferred reply",
+            "node": "Has message",
             "type": "main",
             "index": 0
           }
@@ -943,7 +1154,7 @@
       "main": [
         [
           {
-            "node": "Edit deferred reply",
+            "node": "Has message",
             "type": "main",
             "index": 0
           }
@@ -983,7 +1194,7 @@
         ],
         [
           {
-            "node": "Edit deferred reply",
+            "node": "Has message",
             "type": "main",
             "index": 0
           }
@@ -1005,7 +1216,7 @@
       "main": [
         [
           {
-            "node": "Edit deferred reply",
+            "node": "Has message",
             "type": "main",
             "index": 0
           }
@@ -1045,7 +1256,7 @@
         ],
         [
           {
-            "node": "Edit deferred reply",
+            "node": "Has message",
             "type": "main",
             "index": 0
           }
@@ -1067,7 +1278,7 @@
       "main": [
         [
           {
-            "node": "Edit deferred reply",
+            "node": "Has message",
             "type": "main",
             "index": 0
           }
@@ -1112,6 +1323,80 @@
         [
           {
             "node": "Respond choices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has message": {
+      "main": [
+        [
+          {
+            "node": "Edit deferred reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Delete deferred reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get task (button)": {
+      "main": [
+        [
+          {
+            "node": "Button reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Button reply": {
+      "main": [
+        [
+          {
+            "node": "Respond to button",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to button": {
+      "main": [
+        [
+          {
+            "node": "Should close",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should close": {
+      "main": [
+        [
+          {
+            "node": "Close task (button)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Close task (button)": {
+      "main": [
+        [
+          {
+            "node": "After close",
             "type": "main",
             "index": 0
           }

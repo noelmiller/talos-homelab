@@ -13,7 +13,7 @@ webhooks are published to the internet at
 - `sealed-n8n-todoist-discord.yaml`: sealed inputs of the Todoist workflow (`todoist-client-secret`, `discord-webhook-url`).
 - `sealed-n8n-discord-project-webhooks.yaml`: sealed map of Todoist project name to Discord webhook URL (`project-webhooks`, one JSON object), written by `seal-project-webhook.sh`. Optional.
 - `seal-project-webhook.sh`: adds, replaces, or removes entries in that map and reseals it.
-- `sealed-n8n-discord-interactions.yaml`: sealed Discord application public key and server ID for the slash commands (`public-key`, `guild-id`), written by `setup-discord-command.sh`. Optional.
+- `sealed-n8n-discord-interactions.yaml`: sealed Discord application public key and server ID for the slash commands, and the bot token the relay posts with (`public-key`, `guild-id`, `bot-token`), written by `setup-discord-command.sh`. Optional.
 - `setup-discord-command.sh`: registers the `/tasks`, `/add`, and `/done` slash commands in one server and writes that file.
 - `sealed-cloudflared-credentials.yaml`: sealed tunnel credentials (`credentials.json`, `tunnel-id`).
 - `postgresql-values.yaml`: Bitnami PostgreSQL chart values (10Gi on `nvme-2tb`), image pinned to the same PostgreSQL 18 digest as Coder, Forgejo, and Keycloak, with the Velero `pg_dump` hook.
@@ -90,21 +90,31 @@ needed by the cluster. Delete it, and the credentials file, once the sealed
 Secret is committed.
 
 ## Todoist to Discord
-`workflows/todoist-discord.json` posts an embed to a Discord channel when a
-Todoist task is added, updated, completed, or deleted, with who it is
-assigned to:
+`workflows/todoist-discord.json` posts one line to a Discord channel when a
+Todoist task is added, updated, completed, or deleted:
+
+```
+➕ Pay school fees · 25 Sep · p1 · Sam      [Done]
+✏️ Pay school fees · Due: 25 Sep → 30 Sep
+✅ pretzel chips
+🗑️ Ranch dressing
+```
 
 Webhook (`POST /webhook/todoist`, raw body) -> Code node that verifies
 `X-Todoist-Hmac-SHA256` and parses the event -> HTTP Request that lists the
-projects from the Todoist API -> Code node that builds the embed and picks
-the channel -> HTTP Request to that Discord webhook -> `200 sent`. A bad or missing signature gets
-`401`; anything not relayed gets `200 ignored: <reason>`.
+projects from the Todoist API -> Code node that words the line and picks the
+channel -> Code node that posts it as the bot -> `200 sent`. A bad or missing
+signature gets `401`; anything not relayed gets `200 ignored: <reason>`.
+
+The task text is message content rather than an embed, where an `@everyone`
+in a task name would ping, so every message is sent with mentions disabled,
+and with link previews suppressed.
 
 `item:updated` is the noisy one, so it is filtered. Todoist also sends it when
 a task is completed or uncompleted and for every occurrence of a recurring
 task (`update_intent` other than `item_updated`); those are dropped because
 they have their own events. For a real edit the payload carries the previous
-version of the task, and the embed lists what changed (content, due date,
+version of the task, and the line lists what changed (content, due date,
 priority, labels, description, project, assignee) as `old → new`. An update
 with none of those, such as a drag to reorder, is dropped.
 
@@ -114,12 +124,36 @@ project, which gives the names, and the parents that channel routing walks
 up. If the credential is not connected or the lookup fails, the message is
 posted to the default channel.
 
-An assigned task shows an "Assigned to" field; unassigned tasks show nothing.
-The name comes from the project's collaborators, fetched only when a task has
-an assignee, which only happens in shared projects. If that lookup fails the
-field says "someone". The Project field (`Work / Clients / Acme`) appears only
-in the default channel, where several projects mix; in a project's own channel
-it would be redundant.
+A new task's line ends with its assignee, if it has one. The name comes from
+the project's collaborators, fetched only when a task has an assignee, which
+only happens in shared projects; if that lookup fails it says "someone". The
+project (`in Work / Clients / Acme`) is appended only in the default channel,
+where several projects mix; in a project's own channel it would be redundant.
+
+### The Done button
+With `DISCORD_BOT_TOKEN` set, the relay posts through Discord's bot API
+instead of the channel webhooks, because only a message sent by the
+application itself can carry a working button. The channel is the one the
+project's webhook points at, so the project map stays the single place that
+says where a project goes. A new task gets a Done button whose `custom_id` is
+`done:<task id>`; pressing it reaches the Discord workflow below.
+
+- A press answers first and completes afterwards. The message becomes
+  `✅ ~~task~~ · who` with the button disabled, and only then is the task
+  closed in Todoist. If Todoist refuses, the message is put back and the
+  person is told privately.
+- A retired message keeps its disabled button on purpose. When Todoist then
+  reports the completion, the relay looks through the channel's last 100
+  messages for that task's button: disabled means someone pressed it and the
+  change they watched was the announcement, so nothing more is posted. Enabled
+  means the task was finished somewhere else: the message is retired and one
+  `✅` line is posted. Deletions work the same way with `🗑️`. Nothing is
+  stored; the button is the index.
+- A recurring task only moves to its next date, so its message and button
+  stay, and the person gets a private note.
+- Where the bot cannot post (no token, not a member, a private channel it was
+  not added to) the webhook delivers the same line without a button. A rate
+  limit is retried first, so a burst keeps its buttons.
 
 ### A channel per project
 A Discord webhook belongs to one channel, so routing is a map of project name
@@ -275,22 +309,29 @@ reply.
   mapped webhook posts to is remembered for a day in the workflow's static
   data, keyed by a hash of the URL. Typed text also works: a unique match is
   accepted, an ambiguous one is refused with the candidates.
-- Confirmations are shown to the caller only, because the relay workflow
-  announces the new or completed task to the channel anyway.
+- `/add` and `/done` say nothing when they succeed: Discord requires a reply,
+  so they answer with a private placeholder and delete it again, leaving the
+  relay's line as the only message. Failures, and completing a recurring task
+  (which the relay does not announce), keep a private reply.
+- A press of a Done button arrives at the same endpoint as a component
+  interaction; see "The Done button" above.
 - All Todoist access goes through the same credential as the relay.
 
 ### Setup
 1. In the [Discord developer portal](https://discord.com/developers/applications),
    create an application. Under Installation, keep only "Guild Install" and
    the `applications.commands` scope, open the install link, and add it to
-   your server. No bot permissions are needed.
-2. Register the commands and seal the public key and server ID. The bot token
-   (Bot > Reset Token) is used once for the registration call and not stored:
+   your server. That is enough for the slash commands.
+2. Register the commands and seal the public key, server ID, and bot token
+   (Bot > Reset Token):
    ```sh
    ./16-n8n/setup-discord-command.sh
    ```
-   Run it again whenever the commands or their options change; it replaces
-   the server's command list and offers to skip the sealing.
+   It prints a second install link with the `bot` scope and the View Channel,
+   Send Messages, and Read Message History permissions. Open it once so the
+   bot becomes a member and can post the messages with Done buttons; add it
+   to any private channel it should post in. Run the script again whenever
+   the commands or their options change, or the token is reset.
 3. Commit `sealed-n8n-discord-interactions.yaml`, merge, and let the pod roll.
 4. In the n8n editor, import `workflows/discord-tasks.json` as a new workflow
    and publish it.

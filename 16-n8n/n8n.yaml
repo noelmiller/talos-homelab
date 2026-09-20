@@ -137,6 +137,15 @@ spec:
                   name: n8n-discord-interactions
                   key: guild-id
                   optional: true
+            # Lets the relay post as the application, the only kind of message
+            # that can carry a working Done button. Without it, or where the
+            # bot cannot post, messages go through the channel webhooks.
+            - name: DISCORD_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: n8n-discord-interactions
+                  key: bot-token
+                  optional: true
           ports:
             - name: http
               containerPort: 5678
