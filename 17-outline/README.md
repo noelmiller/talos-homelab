@@ -12,6 +12,7 @@ Keycloak (`14-keycloak`).
 - `sealed-outline-postgresql.yaml`: sealed PostgreSQL credentials (`password`, `postgres-password`).
 - `sealed-outline-secrets.yaml`: sealed `secret-key` (`SECRET_KEY`, 32 random bytes as hex) and `utils-secret` (`UTILS_SECRET`).
 - `sealed-outline-keycloak-oidc.yaml`: sealed OIDC client secret (`client-secret`). The same value is sealed for the `keycloak` namespace in `14-keycloak/sealed-keycloak-outline-client.yaml`.
+- `sealed-outline-smtp.yaml`: sealed SMTP relay login and sender (`username`, `password`, `from-email`), written by `seal-smtp.sh`.
 - `postgresql-values.yaml`: Bitnami PostgreSQL chart values (10Gi on `nvme-2tb`), image pinned to the same PostgreSQL 18 digest as the other layers, with the Velero `pg_dump` pre-backup hook.
 - `redis.yaml`: Redis Deployment and Service, no persistence (see below).
 - `outline.yaml`: the `outline-data` PVC (20Gi on `nvme-2tb`), Deployment (1 replica, `Recreate`), and Service (`3000`).
@@ -30,6 +31,12 @@ Everything is passed as environment variables in `outline.yaml`:
 - `FILE_STORAGE=local`: images, attachments, avatars, and import/export
   archives are written to the `outline-data` volume at
   `/var/lib/outline/data`. Documents themselves live in PostgreSQL.
+- Mail goes through the ISP relay `smtp.midco.net` on the submission port
+  `587`. `SMTP_SECURE=false` does not mean plaintext: it selects STARTTLS
+  (which the relay offers) instead of implicit TLS on `465`. The relay
+  requires a login and the From address is a mailbox it knows, because a
+  sender on `noelmiller.dev` would fail SPF at the recipient. `SMTP_NAME`
+  sets the EHLO name, which otherwise defaults to the pod name.
 - `ENABLE_UPDATES=false`: no version check or anonymised statistics; Renovate
   tracks the image.
 - The image runs pending database migrations on every start, so an upgrade is
@@ -66,10 +73,12 @@ Things to know:
   does not map OIDC groups.
 - Outline rejects a sign-in without an `email` claim, so the Keycloak user
   needs an e-mail address. The username comes from `preferred_username`.
-- Keycloak is the only provider and there is no local account, so there is no
-  break-glass login: while Keycloak is down, nobody new can sign in (existing
-  sessions keep working). E-mail magic links would need SMTP, which is not
-  configured.
+- Keycloak is the only provider and there is no local account. With SMTP
+  configured Outline also offers **Continue with Email**, which mails a
+  sign-in link to a user who already exists in the workspace; that is the
+  break-glass path while Keycloak is down (existing sessions keep working
+  too). It never creates accounts, and can be switched off in the workspace's
+  security settings (it is on by default once SMTP is configured).
 
 ## Rotating credentials
 PostgreSQL (Outline reads the password at startup; rotate it in the database
@@ -89,6 +98,13 @@ kubectl create secret generic outline-postgresql \
     --controller-namespace kube-system \
     > 17-outline/sealed-outline-postgresql.yaml
 unset user_password admin_password
+```
+
+SMTP login or From address (prompts for the values, so run it in a terminal;
+then commit, let it sync, and `kubectl -n outline rollout restart deploy/outline`):
+
+```sh
+bash 17-outline/seal-smtp.sh
 ```
 
 The OIDC client secret is sealed for two namespaces; see "Rotating
@@ -111,8 +127,6 @@ JSON under Settings → Export.
 - Homepage lists Outline in the Cluster group (`05-dashboard/config/services.yaml`).
 
 ## Not yet configured
-- **SMTP**: without `SMTP_*` settings Outline sends no invitations or
-  notification e-mails. Invite people by creating their Keycloak user instead.
 - **Integrations** (Slack, GitHub previews, Iframely, ...): see the
   [configuration docs](https://docs.getoutline.com/s/hosting/doc/configuration-509J4lAzjo).
 - **Public access**: the hostname resolves to the LAN-only Traefik address, so

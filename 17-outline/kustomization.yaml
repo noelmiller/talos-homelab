@@ -6,6 +6,7 @@ resources:
   - sealed-outline-postgresql.yaml
   - sealed-outline-secrets.yaml
   - sealed-outline-keycloak-oidc.yaml
+  - sealed-outline-smtp.yaml
   - redis.yaml
   - outline.yaml
   - outline-route.yaml

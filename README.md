@@ -422,8 +422,9 @@ through the shared Gateway. Pod Security is `restricted`.
 
 Keycloak is the only sign-in provider: any `homelab` realm user with an
 e-mail address can sign in, and the first one to do so creates the workspace
-and becomes its administrator. There is no local break-glass account and no
-SMTP, so Outline sends no e-mail. See
+and becomes its administrator. Invitations, notifications, and e-mail sign-in links (the
+break-glass path for existing users while Keycloak is down) are sent through
+the ISP's SMTP relay. See
 [17-outline/README.md](17-outline/README.md).
 
 ## Networking notes
