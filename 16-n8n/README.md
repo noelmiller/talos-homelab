@@ -283,7 +283,7 @@ racing to refresh at the same moment are within that minute.
 
 | Command | Does | Who sees the reply |
 |---|---|---|
-| `/tasks [project]` | lists a project's open tasks | the channel |
+| `/tasks [project]` | lists a project's open tasks | the caller only |
 | `/add task [due] [priority] [assignee] [description]` | adds a task to the channel's project | nobody, unless it fails |
 | `/done task` | completes a task in the channel's project | nobody, unless it fails |
 
