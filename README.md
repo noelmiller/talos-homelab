@@ -32,6 +32,7 @@ metrics-server-kubelet-patch.yaml Talos KubeletConfig patch enabling serving-cer
 14-keycloak/                      Keycloak single sign-on with PostgreSQL and a git-managed realm
 15-velero/                        Velero backups of cluster objects and volume data to Backblaze B2
 16-n8n/                           n8n workflow automation with PostgreSQL and a Cloudflare Tunnel for webhooks
+17-outline/                       Outline wiki with PostgreSQL and Redis, sign-in through Keycloak
 tests/                            On-demand smoke-test manifests, never applied by ArgoCD
 .github/workflows/                CI: renders every layer, schema-checks it, validates Terraform
 ```
@@ -194,7 +195,7 @@ Once ArgoCD is running (from step 3), bootstrap the app-of-apps pattern **once**
 kubectl apply -f 04-gitops/root-app.yaml
 ```
 
-This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, `virtualization`, `minecraft`, `monitoring`, `palworld`, `unifi`, `coder`, `forgejo`, `keycloak`, `velero`, and `n8n`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
+This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, `virtualization`, `minecraft`, `monitoring`, `palworld`, `unifi`, `coder`, `forgejo`, `keycloak`, `velero`, `n8n`, and `outline`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
 
 From here on, the workflow is just:
 
@@ -206,7 +207,7 @@ ArgoCD polls the repo and auto-syncs + self-heals drift. Force an immediate sync
 
 ### Do not `kubectl apply --server-side` over ArgoCD-managed layers
 
-The bootstrap command in step 3 is for a cluster ArgoCD does not manage yet. Run by hand later, it leaves a `kubectl` field manager co-owning every field it touched. `monitoring`, `virtualization`, `coder`, `forgejo`, `keycloak`, `velero`, and `n8n` sync with `ServerSideApply=true`, where a field is only deleted once its *last* manager drops it: a field removed in git then stays live while the Application still reports `Synced` (this is how a removed node-exporter CPU limit survived a sync). Use `kubectl diff` or `--dry-run=server` to try things out, which record nothing.
+The bootstrap command in step 3 is for a cluster ArgoCD does not manage yet. Run by hand later, it leaves a `kubectl` field manager co-owning every field it touched. `monitoring`, `virtualization`, `coder`, `forgejo`, `keycloak`, `velero`, `n8n`, and `outline` sync with `ServerSideApply=true`, where a field is only deleted once its *last* manager drops it: a field removed in git then stays live while the Application still reports `Synced` (this is how a removed node-exporter CPU limit survived a sync). Use `kubectl diff` or `--dry-run=server` to try things out, which record nothing.
 
 After merging a change that *removes* a field from one of those layers, check the live object rather than trusting `Synced`. If a stale manager shows up in `kubectl get <kind> <name> --show-managed-fields -o yaml`, make it relinquish by server-side-applying a manifest holding only `apiVersion`, `kind`, `metadata.name`, and `metadata.namespace` with `--field-manager=<stale manager>`; fields that manager alone owned are deleted, everything ArgoCD also owns is untouched.
 
@@ -345,7 +346,7 @@ the shared Gateway. Pod Security is `restricted`.
 The `homelab` realm is defined in git
 ([14-keycloak/realm-homelab.json](14-keycloak/realm-homelab.json)) and
 applied by a `keycloak-config-cli` Job that runs as an Argo CD **PostSync
-hook** after every sync, so the realm, the `forgejo` and `coder` OIDC
+hook** after every sync, so the realm, the `forgejo`, `coder`, `argocd`, and `outline` OIDC
 clients, the `groups` claim, the `forgejo-admins` group, and the GitHub
 identity provider are reproducible. GitHub sign-in only links to users that
 already exist in the realm (after a one-time password check); it never
@@ -411,6 +412,20 @@ Discord slash commands that list, add, and complete tasks, and the button. See
 [16-n8n/README.md](16-n8n/README.md) for the tunnel, Todoist, and Discord
 setup.
 
+## 15. Outline
+
+The `outline` namespace runs the [Outline](https://www.getoutline.com/) wiki
+from the official image (raw manifests, Renovate-pinned) with a Bitnami
+PostgreSQL instance, an ephemeral Redis, and a 20Gi volume on `nvme-2tb` for
+uploaded files, exposed at `https://outline.k8s.noelmiller.dev` (LAN only)
+through the shared Gateway. Pod Security is `restricted`.
+
+Keycloak is the only sign-in provider: any `homelab` realm user with an
+e-mail address can sign in, and the first one to do so creates the workspace
+and becomes its administrator. There is no local break-glass account and no
+SMTP, so Outline sends no e-mail. See
+[17-outline/README.md](17-outline/README.md).
+
 ## Networking notes
 
 - The Traefik LoadBalancer IP (`10.42.0.11`) now listens on `22` as well as `80`/`443`. Only Forgejo's `IngressRouteTCP` is attached to that EntryPoint; Traefik closes connections that match no route.
@@ -447,5 +462,5 @@ setup.
 
 - `talosconfig`, `controlplane.yaml`, `worker.yaml`, and `cloudflare-secret.yaml` are gitignored — they contain cluster PKI private keys, join tokens, and a plaintext API token. Never commit them.
 - All in-repo secrets are `SealedSecret`s, decryptable only by the sealed-secrets controller running in this specific cluster.
-- Every namespace carries [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/) labels. `argocd`, `traefik`, `cert-manager`, `kubevirt-manager`, `minecraft`, `palworld`, `forgejo`, `keycloak`, and `n8n` enforce `restricted`; `dashboard`, `coder`, and `default` enforce `baseline` (Homepage runs as root, Coder workspaces may need capabilities, VMs need `virt-launcher`) and warn at `restricted`; `media`, `monitoring`, `unifi`, `kubevirt`, `cdi`, `metallb-system`, and `local-path-storage` are `privileged` because a workload in each genuinely needs it. Check `kubectl label --dry-run=server --overwrite ns <ns> pod-security.kubernetes.io/enforce=restricted` before tightening one.
+- Every namespace carries [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/) labels. `argocd`, `traefik`, `cert-manager`, `kubevirt-manager`, `minecraft`, `palworld`, `forgejo`, `keycloak`, `n8n`, and `outline` enforce `restricted`; `dashboard`, `coder`, and `default` enforce `baseline` (Homepage runs as root, Coder workspaces may need capabilities, VMs need `virt-launcher`) and warn at `restricted`; `media`, `monitoring`, `unifi`, `kubevirt`, `cdi`, `metallb-system`, and `local-path-storage` are `privileged` because a workload in each genuinely needs it. Check `kubectl label --dry-run=server --overwrite ns <ns> pod-security.kubernetes.io/enforce=restricted` before tightening one.
 - Resource requests on the media stack, Homepage, and Coder were sized from seven days of Prometheus data (peak working-set memory, p95 CPU) with memory limits at roughly three times the observed peak and no CPU limits on bursty workloads such as Jellyfin transcoding.

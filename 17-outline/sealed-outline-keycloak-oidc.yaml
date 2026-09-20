@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: outline-keycloak-oidc
+  namespace: outline
+spec:
+  encryptedData:
+    client-secret: AgABuXjz7PlDmuebA3i52LCihMJK25FSNXxYy95Zr8OiMNv8y15fwO4xRfhJxnLEG2f+Usp6loRsFUTY1dXHb4dqSw+7xAjPQKfSrlcd3Oahd3WZjVqgtz6QJS+iz+Kt1gM9O1SUH0kYJCP9/IpogvTzfyzehV5qmTm8CbMjWvw4gLbxsNrFfIyclhIbvlHi4ZPO3CY7XaPAdtmJaaLXGqBlTOrf9PsdS3w6JUzJgTZufF4+vF193ctWBNhoqyerzEJnyJu5aRMRK4uBFx4y5iO+FlMHeCITr8KegsAkP+qNgUKpkqI9rXG8zpZsfTtgxqcuzO0jAO9I0rrd9TXvD5uNuo62EG3cx7mx8B5lxNJoVuuqDKbyme45gMvQVxdWBzigzBYdSXdsJc5TggCqWeJLWO66XCvNYtFtGQqCaHJB1Uxjbg1x7xK2ET42gF4U21hK/+yN5hhxQppXRsMa7ymUrv+4SuSP4c+2rADej0IWS0fj8g9phZk5IU4dX5XTgWzwk75P7i5Adi8B4uRmLQqgY2UQYcGMSThaYHSAFzFHadQ/dPCbuQ/OzZY4xjKmJ/blkGpWXalvjX+8g3XOw9LT53ysIx6NCNlJFBTNVEeseR35cLNHqwhM+pPQf72PCfc2DXjeAVWB4cFYoxVynFqjalGkurYIvVOf9VhObM855mrMdwYONQ9BMlMqkTIywtU8NVDvGlOZIRx+L5PhICf/OwoBmoZPMGK1tciuv52/F7M5SZBMnQHEVHxYk2/ashE=
+  template:
+    metadata:
+      name: outline-keycloak-oidc
+      namespace: outline

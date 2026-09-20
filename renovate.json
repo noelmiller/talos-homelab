@@ -14,7 +14,8 @@
       "/^07-minecraft/.+\\.yaml$/",
       "/^09-palworld/.+\\.yaml$/",
       "/^14-keycloak/.+\\.yaml$/",
-      "/^16-n8n/.+\\.yaml$/"
+      "/^16-n8n/.+\\.yaml$/",
+      "/^17-outline/.+\\.yaml$/"
     ]
   },
   "customDatasources": {

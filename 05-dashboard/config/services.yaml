@@ -52,6 +52,10 @@
         href: https://n8n.k8s.noelmiller.dev
         description: Workflow automation
         icon: n8n.png
+    - Outline:
+        href: https://outline.k8s.noelmiller.dev
+        description: Wiki and knowledge base
+        icon: outline.png
     - UniFi:
         href: https://unifi.k8s.noelmiller.dev
         description: Network controller appliance

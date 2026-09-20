@@ -3,29 +3,18 @@ kind: Kustomization
 
 resources:
   - namespace.yaml
-  - sealed-keycloak-postgresql.yaml
-  - sealed-keycloak-admin.yaml
-  - sealed-keycloak-forgejo-client.yaml
-  - sealed-keycloak-coder-client.yaml
-  - sealed-keycloak-argocd-client.yaml
-  - sealed-keycloak-outline-client.yaml
-  - sealed-keycloak-github-idp.yaml
-  - keycloak.yaml
-  - keycloak-route.yaml
-  - realm-import-job.yaml
-
-# Hashed name: editing the realm file rolls the import Job.
-configMapGenerator:
-  - name: keycloak-realm
-    namespace: keycloak
-    files:
-      - realm-homelab.json
+  - sealed-outline-postgresql.yaml
+  - sealed-outline-secrets.yaml
+  - sealed-outline-keycloak-oidc.yaml
+  - redis.yaml
+  - outline.yaml
+  - outline-route.yaml
 
 helmCharts:
   - name: postgresql
     repo: https://charts.bitnami.com/bitnami
-    releaseName: keycloak-postgresql
-    namespace: keycloak
+    releaseName: outline-postgresql
+    namespace: outline
     version: 18.11.4
     valuesFile: postgresql-values.yaml
 
