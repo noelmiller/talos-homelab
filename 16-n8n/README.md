@@ -94,16 +94,20 @@ Secret is committed.
 Todoist task is added, updated, completed, or deleted:
 
 ```
-Pay school fees · 25 Sep · p1 · Sam          [✅]
+Pay school fees                              [✅]     <- a heading, drawn larger
+25 Sep · p1 · Sam                                     <- small print
 Pay school fees · Due: 25 Sep → 30 Sep
+~~pretzel chips~~ · Sam                       [✖]     <- the same message, completed
 ~~pretzel chips~~ · completed
 Call plumber · reopened
 ~~Ranch dressing~~ · deleted
 ```
 
-The task's name leads, with no icon: a new task is just the task, a finished
-one is struck through, and what happened is said in a word where the line
-would not show it.
+The task's name leads, with no icon. A new task is a `###` heading with its
+details in Discord's small print (`-#`) underneath, because a heading is the
+only way to make text larger and it takes a whole line. Everything else stays
+one ordinary line: a finished task is struck through, and what happened is
+said in a word where the line would not show it.
 
 Webhook (`POST /webhook/todoist`, raw body) -> Code node that verifies
 `X-Todoist-Hmac-SHA256` and parses the event -> HTTP Request that lists the
@@ -143,6 +147,15 @@ project's webhook points at, so the project map stays the single place that
 says where a project goes. An open task's message carries a small ✅ button
 (`custom_id` `done:<task id>`), a completed one a red ✖ undo button
 (`undo:<task id>`); pressing either reaches the Discord workflow below.
+
+Discord fixes the size of a button, so the way to make it less dominant is
+where it sits. A task's message uses the "components v2" layout (message flag
+`1 << 15`): a section whose text is on the left and whose one button is at
+the right end of the same row, rather than text with a button row under it.
+In that layout the text lives inside the component and `content` is empty, so
+the workflows read and write the section, and find a task's message by
+searching the components for its `custom_id`. Messages posted before this
+layout keep theirs, and are read and answered as they are.
 
 - A press answers first and changes Todoist afterwards. ✅ turns the message
   into `~~task~~ · who` with the undo button and then closes the task; ✖ puts
