@@ -1,0 +1,46 @@
+image:
+  # Chart 18.x defaults to the floating `latest` tag, which would silently pull
+  # a new PostgreSQL major on any pod restart and refuse to start on the old
+  # data directory. Pin the same PostgreSQL 18.6.0 digest Coder, Forgejo,
+  # Keycloak, and n8n run so the node caches one image. Bump deliberately, with a backup.
+  digest: sha256:b69d1fca390fb131639e86e820f248acfc5d911339dc884796f8009260c598d7
+
+auth:
+  username: outline
+  database: outline
+  existingSecret: outline-postgresql
+  secretKeys:
+    adminPasswordKey: postgres-password
+    userPasswordKey: password
+
+primary:
+  lifecycleHooks:
+    # PostgreSQL treats the kubelet's SIGTERM as a "smart" shutdown and waits
+    # for every client to disconnect. The application's connection pool never
+    # does, so after the grace period the container is killed and the next
+    # start runs crash recovery. Ask for a fast shutdown first.
+    preStop:
+      exec:
+        command: ["/bin/sh", "-c", "pg_ctl -D \"$PGDATA\" -m fast -w -t 25 stop"]
+  podAnnotations:
+    # Velero (15-velero) copies this volume while PostgreSQL is writing to it,
+    # which restores like a power cut. Before each backup it runs this in the
+    # container to leave a consistent logical dump next to the data directory,
+    # at /bitnami/postgresql/backup/<database>.sql. A failed dump marks the
+    # backup PartiallyFailed.
+    pre.hook.backup.velero.io/container: postgresql
+    pre.hook.backup.velero.io/timeout: 10m
+    pre.hook.backup.velero.io/on-error: Fail
+    pre.hook.backup.velero.io/command: >-
+      ["/bin/sh", "-c", "set -e; umask 077; d=/bitnami/postgresql/backup; mkdir -p \"$d\"; PGPASSWORD=\"$(cat \"$POSTGRES_PASSWORD_FILE\")\" pg_dump -U \"$POSTGRES_USER\" -d \"$POSTGRES_DATABASE\" --clean --if-exists -f \"$d/$POSTGRES_DATABASE.sql.tmp\"; mv \"$d/$POSTGRES_DATABASE.sql.tmp\" \"$d/$POSTGRES_DATABASE.sql\""]
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  persistence:
+    enabled: true
+    storageClass: nvme-2tb
+    size: 10Gi

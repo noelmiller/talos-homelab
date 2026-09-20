@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - sealed-outline-postgresql.yaml
+  - sealed-outline-secrets.yaml
+  - sealed-outline-keycloak-oidc.yaml
+  - redis.yaml
+  - outline.yaml
+  - outline-route.yaml
+
+helmCharts:
+  - name: postgresql
+    repo: https://charts.bitnami.com/bitnami
+    releaseName: outline-postgresql
+    namespace: outline
+    version: 18.11.4
+    valuesFile: postgresql-values.yaml
+
+patches:
+  # Never let an Argo CD prune or a cascading Application delete remove a PVC.
+  # Data lives on local disks and is not reproducible from git.
+  - target:
+      kind: PersistentVolumeClaim
+    patch: |-
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: not-used
+        annotations:
+          argocd.argoproj.io/sync-options: Prune=false,Delete=false

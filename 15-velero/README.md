@@ -48,7 +48,7 @@ database therefore also gets a consistent copy *inside* a backed-up volume:
 
 | Data | Consistent copy | Made by |
 |---|---|---|
-| Coder, Forgejo, Keycloak, n8n PostgreSQL | `/bitnami/postgresql/backup/<database>.sql` | Velero pre-backup hook (`pg_dump`), pod annotations in each `postgresql-values.yaml` |
+| Coder, Forgejo, Keycloak, n8n, Outline PostgreSQL | `/bitnami/postgresql/backup/<database>.sql` | Velero pre-backup hook (`pg_dump`), pod annotations in each `postgresql-values.yaml` |
 | Ombi MySQL | `/var/lib/mysql/ombi-dump.sql` | Velero pre-backup hook (`mysqldump`), annotations in `03-media/ombi-mysql.yaml` |
 | Minecraft worlds | `minecraft-backups`, `minecraft-creative-backups` volumes | the `mc-backup` sidecar, every 12 hours |
 | Palworld | `/palworld/backups` inside `palworld-data` | the server's built-in daily backup |

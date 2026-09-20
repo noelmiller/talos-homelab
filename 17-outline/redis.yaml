@@ -1,0 +1,93 @@
+# Outline keeps its job queues, rate-limiter counters, and collaboration
+# presence in Redis. None of it is a source of truth (documents and sessions
+# live in PostgreSQL), so this runs without persistence: a restart drops
+# queued background jobs such as pending notification e-mails and exports.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: outline-redis
+  namespace: outline
+  labels:
+    app.kubernetes.io/name: outline-redis
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: outline-redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: outline-redis
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        # The image's `redis` user.
+        runAsUser: 999
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          image: redis:8.10.1-alpine@sha256:bd999b5cfee25fb24b8320a31fddbd69f462df44c8138c66e369582937beebc0
+          args:
+            - --save
+            - ""
+            - --appendonly
+            - "no"
+            # Bull queues must never be evicted; fail writes instead and let
+            # the memory limit below be the backstop.
+            - --maxmemory
+            - 192mb
+            - --maxmemory-policy
+            - noeviction
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: outline-redis
+  namespace: outline
+  labels:
+    app.kubernetes.io/name: outline-redis
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: outline-redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis

@@ -1,0 +1,188 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: outline-data
+  namespace: outline
+  labels:
+    app.kubernetes.io/name: outline
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nvme-2tb
+  resources:
+    requests:
+      # Documents live in PostgreSQL. This holds uploaded images, attachments,
+      # avatars, and import/export archives (FILE_STORAGE=local). local-path
+      # does not enforce the size.
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: outline
+  namespace: outline
+  labels:
+    app.kubernetes.io/name: outline
+spec:
+  replicas: 1
+  # Single instance on a ReadWriteOnce volume: never run two at once.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: outline
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: outline
+    spec:
+      # The Service is named `outline`, so service links would inject
+      # OUTLINE_PORT=tcp://... style variables next to Outline's own PORT.
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        # The image's `nodejs` user.
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: outline
+          # Runs pending database migrations itself on every start.
+          image: outlinewiki/outline:1.10.1@sha256:832051f039b446c87aa23929cf92c00980c66aaa2d744d118c48c016ec816ad8
+          env:
+            # Public URL. TLS terminates at Traefik, which also redirects
+            # port 80, so Outline serves plain HTTP and trusts X-Forwarded-*
+            # (its default). With FORCE_HTTPS on, the kubelet and blackbox
+            # probes would be redirected instead of answered.
+            - name: URL
+              value: https://outline.k8s.noelmiller.dev
+            - name: PORT
+              value: "3000"
+            - name: FORCE_HTTPS
+              value: "false"
+            - name: WEB_CONCURRENCY
+              value: "1"
+            # Encrypts sessions and stored integration tokens. Changing it
+            # signs everyone out and makes those tokens unreadable.
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: outline-secrets
+                  key: secret-key
+            - name: UTILS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: outline-secrets
+                  key: utils-secret
+            # Discrete settings rather than DATABASE_URL (Outline refuses a
+            # mix of the two), so the password is never spliced into a URL.
+            - name: DATABASE_HOST
+              value: outline-postgresql
+            - name: DATABASE_PORT
+              value: "5432"
+            - name: DATABASE_NAME
+              value: outline
+            - name: DATABASE_USER
+              value: outline
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: outline-postgresql
+                  key: password
+            # In-cluster PostgreSQL speaks plain TCP.
+            - name: PGSSLMODE
+              value: disable
+            - name: REDIS_URL
+              value: redis://outline-redis:6379
+            - name: FILE_STORAGE
+              value: local
+            - name: FILE_STORAGE_LOCAL_ROOT_DIR
+              value: /var/lib/outline/data
+            # Keycloak (14-keycloak) is the only sign-in provider. The
+            # `outline` client lives in 14-keycloak/realm-homelab.json; its
+            # secret is sealed for both namespaces. Endpoints, PKCE, and the
+            # logout URL come from the realm's discovery document, which
+            # Outline fetches at startup and exits without, so the pod
+            # restarts until Keycloak and the `homelab` realm answer.
+            - name: OIDC_ISSUER_URL
+              value: https://auth.k8s.noelmiller.dev/realms/homelab
+            - name: OIDC_CLIENT_ID
+              value: outline
+            - name: OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: outline-keycloak-oidc
+                  key: client-secret
+            - name: OIDC_DISPLAY_NAME
+              value: Keycloak
+            - name: OIDC_USERNAME_CLAIM
+              value: preferred_username
+            - name: OIDC_SCOPES
+              value: openid profile email
+            - name: DEFAULT_LANGUAGE
+              value: en_US
+            # No version check or anonymised statistics to the maintainers;
+            # Renovate tracks the image.
+            - name: ENABLE_UPDATES
+              value: "false"
+            - name: LOG_LEVEL
+              value: info
+          ports:
+            - name: http
+              containerPort: 3000
+          startupProbe:
+            httpGet:
+              path: /_health
+              port: http
+            periodSeconds: 5
+            # First start runs every migration since the initial schema.
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /_health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /_health
+              port: http
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1536Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/outline/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: outline-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: outline
+  namespace: outline
+  labels:
+    app.kubernetes.io/name: outline
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: outline
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
