@@ -40,7 +40,8 @@ commands='[
       {"type": 3, "name": "due", "description": "When, in plain words: tomorrow, fri 5pm, every monday", "required": false},
       {"type": 4, "name": "priority", "description": "p1 is the most urgent", "required": false,
        "choices": [{"name": "p1", "value": 1}, {"name": "p2", "value": 2}, {"name": "p3", "value": 3}, {"name": "p4", "value": 4}]},
-      {"type": 3, "name": "assignee", "description": "Who should do it (shared projects only)", "required": false, "autocomplete": true}
+      {"type": 3, "name": "assignee", "description": "Who should do it (shared projects only)", "required": false, "autocomplete": true},
+      {"type": 3, "name": "description", "description": "More detail, kept inside the task", "required": false, "max_length": 2000}
     ]
   },
   {

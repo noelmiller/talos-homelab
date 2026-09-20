@@ -23,7 +23,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const crypto = require('crypto');\n\nconst reply = (status, body) => [{ json: { kind: 'respond', status, body } }];\n// Ephemeral: only the person who ran the command sees it.\nconst say = (content) => reply(200, { type: 4, data: { content, flags: 64 } });\n\n// Discord signs timestamp + raw body with the application's Ed25519 key, and\n// probes the endpoint with bad signatures, which must get a 401.\nconst raw = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst headers = $input.first().json.headers;\nconst signature = headers['x-signature-ed25519'] ?? '';\nconst timestamp = headers['x-signature-timestamp'] ?? '';\nconst publicKey = $env.DISCORD_PUBLIC_KEY;\nif (!publicKey) throw new Error('DISCORD_PUBLIC_KEY is not set');\n\nlet valid = false;\ntry {\n  // A raw 32-byte Ed25519 key behind the fixed SPKI prefix.\n  const key = crypto.createPublicKey({\n    key: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), Buffer.from(publicKey, 'hex')]),\n    format: 'der',\n    type: 'spki',\n  });\n  valid = /^[0-9a-f]{128}$/i.test(signature)\n    && Math.abs(Date.now() / 1000 - Number(timestamp)) < 300\n    && crypto.verify(null, Buffer.concat([Buffer.from(timestamp), raw]), key, Buffer.from(signature, 'hex'));\n} catch (e) {\n  valid = false;\n}\nif (!valid) return reply(401, { error: 'invalid request signature' });\n\nconst interaction = JSON.parse(raw.toString('utf8'));\nif (interaction.type === 1) return reply(200, { type: 1 }); // PING\n\nif ($env.DISCORD_GUILD_ID && interaction.guild_id !== $env.DISCORD_GUILD_ID) return say('This command is not available here.');\n\n// Todoist attributes everything done through the API to the account that\n// connected the credential, so remember who asked.\nconst who = interaction.member?.nick ?? interaction.member?.user?.global_name ?? interaction.member?.user?.username ?? 'someone';\n\n// Type 3: someone pressed a button. Only this application can put buttons on\n// its messages, so the task id in custom_id is one the relay wrote.\nif (interaction.type === 3) {\n  const pressed = /^done:(.+)$/.exec(interaction.data?.custom_id ?? '');\n  if (!pressed) return say('Unknown button.');\n  return [{\n    json: {\n      kind: 'component',\n      component: {\n        task_id: pressed[1],\n        who,\n        application_id: interaction.application_id,\n        token: interaction.token,\n        message: { content: interaction.message?.content ?? '', components: interaction.message?.components ?? [] },\n      },\n    },\n  }];\n}\n\nconst name = interaction.data?.name;\nif (![2, 4].includes(interaction.type) || !['tasks', 'add', 'done'].includes(name)) return say('Unknown command.');\n\nconst given = interaction.data.options ?? [];\nconst command = {\n  name,\n  options: Object.fromEntries(given.map((o) => [o.name, typeof o.value === 'string' ? o.value.trim() : o.value])),\n  channel_id: interaction.channel_id,\n  application_id: interaction.application_id,\n  token: interaction.token,\n  who,\n};\n\n// Type 4: Discord wants suggestions for the option being typed, answered\n// directly and within three seconds.\nif (interaction.type === 4) return [{ json: { kind: 'autocomplete', command: { ...command, focused: given.find((o) => o.focused)?.name } } }];\n\n// Type 5 shows \"thinking...\" at once; the result follows as an edit of that\n// message, which lifts Discord's three-second limit on the reply. The list is\n// public. /add and /done answer privately, and the answer is deleted again on\n// success, because the relay workflow announces the change to the channel.\nreturn [{ json: { kind: 'command', status: 200, body: name === 'tasks' ? { type: 5 } : { type: 5, data: { flags: 64 } }, command } }];"
+        "jsCode": "const crypto = require('crypto');\n\nconst reply = (status, body) => [{ json: { kind: 'respond', status, body } }];\n// Ephemeral: only the person who ran the command sees it.\nconst say = (content) => reply(200, { type: 4, data: { content, flags: 64 } });\n\n// Discord signs timestamp + raw body with the application's Ed25519 key, and\n// probes the endpoint with bad signatures, which must get a 401.\nconst raw = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst headers = $input.first().json.headers;\nconst signature = headers['x-signature-ed25519'] ?? '';\nconst timestamp = headers['x-signature-timestamp'] ?? '';\nconst publicKey = $env.DISCORD_PUBLIC_KEY;\nif (!publicKey) throw new Error('DISCORD_PUBLIC_KEY is not set');\n\nlet valid = false;\ntry {\n  // A raw 32-byte Ed25519 key behind the fixed SPKI prefix.\n  const key = crypto.createPublicKey({\n    key: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), Buffer.from(publicKey, 'hex')]),\n    format: 'der',\n    type: 'spki',\n  });\n  valid = /^[0-9a-f]{128}$/i.test(signature)\n    && Math.abs(Date.now() / 1000 - Number(timestamp)) < 300\n    && crypto.verify(null, Buffer.concat([Buffer.from(timestamp), raw]), key, Buffer.from(signature, 'hex'));\n} catch (e) {\n  valid = false;\n}\nif (!valid) return reply(401, { error: 'invalid request signature' });\n\nconst interaction = JSON.parse(raw.toString('utf8'));\nif (interaction.type === 1) return reply(200, { type: 1 }); // PING\n\nif ($env.DISCORD_GUILD_ID && interaction.guild_id !== $env.DISCORD_GUILD_ID) return say('This command is not available here.');\n\n// Todoist attributes everything done through the API to the account that\n// connected the credential, so remember who asked.\nconst who = interaction.member?.nick ?? interaction.member?.user?.global_name ?? interaction.member?.user?.username ?? 'someone';\n\n// Type 3: someone pressed a button. Only this application can put buttons on\n// its messages, so the task id in custom_id is one the relay wrote.\nif (interaction.type === 3) {\n  const pressed = /^(done|undo):(.+)$/.exec(interaction.data?.custom_id ?? '');\n  if (!pressed) return say('Unknown button.');\n  return [{\n    json: {\n      kind: 'component',\n      component: {\n        action: pressed[1],\n        task_id: pressed[2],\n        who,\n        application_id: interaction.application_id,\n        token: interaction.token,\n        message: { content: interaction.message?.content ?? '', components: interaction.message?.components ?? [] },\n      },\n    },\n  }];\n}\n\nconst name = interaction.data?.name;\nif (![2, 4].includes(interaction.type) || !['tasks', 'add', 'done'].includes(name)) return say('Unknown command.');\n\nconst given = interaction.data.options ?? [];\nconst command = {\n  name,\n  options: Object.fromEntries(given.map((o) => [o.name, typeof o.value === 'string' ? o.value.trim() : o.value])),\n  channel_id: interaction.channel_id,\n  application_id: interaction.application_id,\n  token: interaction.token,\n  who,\n};\n\n// Type 4: Discord wants suggestions for the option being typed, answered\n// directly and within three seconds.\nif (interaction.type === 4) return [{ json: { kind: 'autocomplete', command: { ...command, focused: given.find((o) => o.focused)?.name } } }];\n\n// Type 5 shows \"thinking...\" at once; the result follows as an edit of that\n// message, which lifts Discord's three-second limit on the reply. The list is\n// public. /add and /done answer privately, and the answer is deleted again on\n// success, because the relay workflow announces the change to the channel.\nreturn [{ json: { kind: 'command', status: 200, body: name === 'tasks' ? { type: 5 } : { type: 5, data: { flags: 64 } }, command } }];"
       },
       "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0002",
       "name": "Verify",
@@ -494,7 +494,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const { options, who } = $('Verify').first().json.command;\nconst { project_id } = $('Pick project').first().json;\nconst fail = (content) => [{ json: { message: { content, allowed_mentions: { parse: [] } } } }];\n\nconst content = (options.task ?? '').trim();\nif (!content) return fail('A task needs some text.');\n\nconst body = { content: content.slice(0, 500), project_id, description: `Added from Discord by ${who}.` };\nif (options.due) body.due_string = options.due;\n// The command offers p1-p4; the API counts the other way (4 = p1).\nif (options.priority) body.priority = 5 - options.priority;\n\nif (options.assignee) {\n  // The value is a collaborator id when picked from the suggestions, or\n  // whatever was typed otherwise.\n  const people = $('Get collaborators (add)').first().json.results ?? [];\n  const typed = String(options.assignee).toLowerCase();\n  const person = people.find((c) => String(c.id) === String(options.assignee))\n    ?? people.find((c) => c.name.toLowerCase() === typed)\n    ?? (people.filter((c) => c.name.toLowerCase().includes(typed)).length === 1 ? people.find((c) => c.name.toLowerCase().includes(typed)) : null);\n  if (!person) return fail(`Nobody in this project matches \"${options.assignee}\". People: ${people.map((c) => c.name).join(', ') || 'none'}`);\n  body.assignee_id = person.id;\n  return [{ json: { body, assignee: person.name } }];\n}\nreturn [{ json: { body } }];"
+        "jsCode": "const { options, who } = $('Verify').first().json.command;\nconst { project_id } = $('Pick project').first().json;\nconst fail = (content) => [{ json: { message: { content, allowed_mentions: { parse: [] } } } }];\n\nconst content = (options.task ?? '').trim();\nif (!content) return fail('A task needs some text.');\n\n// Todoist attributes the task to the account behind the credential, so who\n// asked for it goes under whatever description they gave.\nconst description = [String(options.description ?? '').trim().slice(0, 2000), `Added from Discord by ${who}.`].filter(Boolean).join('\\n\\n');\nconst body = { content: content.slice(0, 500), project_id, description };\nif (options.due) body.due_string = options.due;\n// The command offers p1-p4; the API counts the other way (4 = p1).\nif (options.priority) body.priority = 5 - options.priority;\n\nif (options.assignee) {\n  // The value is a collaborator id when picked from the suggestions, or\n  // whatever was typed otherwise.\n  const people = $('Get collaborators (add)').first().json.results ?? [];\n  const typed = String(options.assignee).toLowerCase();\n  const person = people.find((c) => String(c.id) === String(options.assignee))\n    ?? people.find((c) => c.name.toLowerCase() === typed)\n    ?? (people.filter((c) => c.name.toLowerCase().includes(typed)).length === 1 ? people.find((c) => c.name.toLowerCase().includes(typed)) : null);\n  if (!person) return fail(`Nobody in this project matches \"${options.assignee}\". People: ${people.map((c) => c.name).join(', ') || 'none'}`);\n  body.assignee_id = person.id;\n  return [{ json: { body, assignee: person.name } }];\n}\nreturn [{ json: { body } }];"
       },
       "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0013",
       "name": "Prepare task",
@@ -885,7 +885,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const { task_id, who, message } = $('Verify').first().json.component;\nconst task = $input.first().json;\n\n// The task's name, from Todoist if it still exists, else from the message:\n// \"<icon> [name](<url>) · details\" or \"<icon> name · details\".\nconst shown = message.content.replace(/^\\S+\\s+/, '');\nconst name = task.content ?? (/^\\[(.+?)\\]\\(<[^>]*>\\)/.exec(shown)?.[1] ?? shown.split(' · ')[0]).replace(/~~/g, '');\n\n// A retired message keeps its button, disabled, which is how the relay tells a\n// press from a completion made somewhere else.\nconst retired = (suffix) => ({\n  type: 7,\n  data: {\n    content: `✅ ~~${name}~~${suffix}`,\n    components: [{ type: 1, components: [{ type: 2, style: 2, label: 'Done', custom_id: `done:${task_id}`, disabled: true }] }],\n    allowed_mentions: { parse: [] },\n  },\n});\n\n// Answer first and complete afterwards: the message must already be retired\n// when Todoist's own webhook reaches the relay, or it would announce this too.\nif (!task.id || task.checked || task.is_deleted) return [{ json: { body: retired(''), close: false } }];\nif (task.due?.is_recurring) {\n  return [{ json: { body: { type: 4, data: { content: `Completing this occurrence of \"${name}\"; it comes back on its next date.`, flags: 64 } }, close: true, task_id, name, recurring: true } }];\n}\nreturn [{ json: { body: retired(` · ${who}`), close: true, task_id, name, recurring: false } }];"
+        "jsCode": "const { action, task_id, who, message } = $('Verify').first().json.component;\nconst task = $input.first().json;\n\n// The task's name, from Todoist if it still answers for it, else from the\n// message: \"[name](<url>) · details\", \"~~name~~ · who\", or \"name · details\".\n// Messages posted before the icons were dropped start with one.\nconst shown = message.content.replace(/^(?:➕|✏️|✅|↩️|🗑️)\\s+/u, '');\nconst name = task.content\n  ?? (/^\\[(.+?)\\]\\(<[^>]*>\\)/.exec(shown)?.[1] ?? /^~~(.+?)~~/.exec(shown)?.[1] ?? shown.split(' · ')[0]);\n\nconst update = (content, ...buttons) => ({\n  type: 7,\n  data: { content, components: buttons.length ? [{ type: 1, components: buttons }] : [], allowed_mentions: { parse: [] } },\n});\nconst doneButton = { type: 2, style: 2, emoji: { name: '✅' }, custom_id: `done:${task_id}` };\nconst undoButton = { type: 2, style: 4, emoji: { name: '✖️' }, custom_id: `undo:${task_id}` };\nconst link = /[\\[\\]]/.test(name) ? name : `[${name}](<https://app.todoist.com/app/task/${task_id}>)`;\n\n// Answer first and change Todoist afterwards: the message must already show\n// the new state when Todoist's own webhook reaches the relay, or the relay\n// would announce the change a second time.\nif (action === 'undo') {\n  // Details such as the due date come back in a moment, once Todoist has\n  // reopened the task and can be asked for them.\n  return [{ json: { body: update(link, doneButton), op: 'reopen', task_id, name } }];\n}\n\nif (!task.id || task.checked || task.is_deleted) return [{ json: { body: update(`~~${name}~~ · completed`, undoButton), op: 'none' } }];\nif (task.due?.is_recurring) {\n  return [{ json: { body: { type: 4, data: { content: `Completing this occurrence of \"${name}\"; it comes back on its next date.`, flags: 64 } }, op: 'close', task_id, name, keep_message: true } }];\n}\nreturn [{ json: { body: update(`~~${name}~~ · ${who}`, undoButton), op: 'close', task_id, name } }];"
       },
       "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0031",
       "name": "Button reply",
@@ -915,33 +915,64 @@
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
-          },
-          "conditions": [
+        "rules": {
+          "values": [
             {
-              "id": "c1",
-              "leftValue": "={{ $('Button reply').first().json.close }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r0",
+                    "leftValue": "={{ $('Button reply').first().json.op }}",
+                    "rightValue": "close",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "close"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r1",
+                    "leftValue": "={{ $('Button reply').first().json.op }}",
+                    "rightValue": "reopen",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "reopen"
             }
-          ],
-          "combinator": "and"
+          ]
         },
         "options": {}
       },
       "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0033",
-      "name": "Should close",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
+      "name": "Button action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
       "position": [
         1320,
         500
@@ -963,7 +994,7 @@
       "typeVersion": 4.2,
       "position": [
         1540,
-        500
+        400
       ],
       "credentials": {
         "oAuth2Api": {
@@ -975,7 +1006,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const closed = $input.first().json;\nif (!closed.error) return [{ json: { ok: true } }];\n\n// Todoist refused, so undo the optimistic answer and tell the person privately.\nconst { application_id, token, message } = $('Verify').first().json.component;\nconst { name, recurring } = $('Button reply').first().json;\nconst hook = `https://discord.com/api/v10/webhooks/${application_id}/${token}`;\nif (!recurring) {\n  await this.helpers.httpRequest({ method: 'PATCH', url: `${hook}/messages/@original`, json: true, body: { content: message.content, components: message.components, allowed_mentions: { parse: [] } } });\n}\nawait this.helpers.httpRequest({ method: 'POST', url: hook, json: true, body: { content: `Todoist did not complete \"${name}\": ${closed.error.message ?? 'unknown error'}`, flags: 64, allowed_mentions: { parse: [] } } });\nreturn [{ json: { ok: false } }];"
+        "jsCode": "// After a close this node follows \"Close task (button)\". After a reopen it\n// follows \"Get task (reopened)\", and the reopen's own result is one node back.\nconst result = $input.first().json;\nconst { application_id, token, message } = $('Verify').first().json.component;\nconst { op, name, task_id, keep_message } = $('Button reply').first().json;\nconst hook = `https://discord.com/api/v10/webhooks/${application_id}/${token}`;\nconst patch = (body) => this.helpers.httpRequest({ method: 'PATCH', url: `${hook}/messages/@original`, json: true, body: { ...body, allowed_mentions: { parse: [] } } });\n\nconst failure = (op === 'reopen' ? $('Reopen task').first().json : result).error;\nif (failure) {\n  // Todoist refused, so undo the optimistic answer and tell the person privately.\n  if (!keep_message) await patch({ content: message.content, components: message.components });\n  const verb = op === 'reopen' ? 'reopen' : 'complete';\n  await this.helpers.httpRequest({ method: 'POST', url: hook, json: true, body: { content: `Todoist did not ${verb} \"${name}\": ${failure.message ?? 'unknown error'}`, flags: 64, allowed_mentions: { parse: [] } } });\n  return [{ json: { ok: false } }];\n}\n\n// Once reopened, Todoist answers for the task again, so its due date and\n// priority can go back on the line. The assignee's name would need another lookup; it returns\n// with the task's next update.\nif (op === 'reopen' && result.id) {\n  const details = [];\n  if (result.due?.string) details.push(result.due.string);\n  if (result.priority > 1) details.push(`p${5 - result.priority}`);\n  if (details.length) {\n    const link = /[\\[\\]]/.test(name) ? name : `[${name}](<https://app.todoist.com/app/task/${task_id}>)`;\n    await patch({ content: [link, ...details].join(' · ') });\n  }\n}\nreturn [{ json: { ok: true } }];"
       },
       "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0035",
       "name": "After close",
@@ -983,7 +1014,71 @@
       "typeVersion": 2,
       "position": [
         1760,
-        500
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.todoist.com/api/v1/tasks/{{ $('Button reply').first().json.task_id }}/reopen",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 8000
+        },
+        "method": "POST"
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0036",
+      "name": "Reopen task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        600
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "TodoistOAuth2001",
+          "name": "Todoist"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.todoist.com/api/v1/tasks/{{ $('Button reply').first().json.task_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "options": {
+          "timeout": 8000
+        }
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0037",
+      "name": "Get task (reopened)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        600
+      ],
+      "credentials": {
+        "oAuth2Api": {
+          "id": "TodoistOAuth2001",
+          "name": "Todoist"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// After a close this node follows \"Close task (button)\". After a reopen it\n// follows \"Get task (reopened)\", and the reopen's own result is one node back.\nconst result = $input.first().json;\nconst { application_id, token, message } = $('Verify').first().json.component;\nconst { op, name, task_id, keep_message } = $('Button reply').first().json;\nconst hook = `https://discord.com/api/v10/webhooks/${application_id}/${token}`;\nconst patch = (body) => this.helpers.httpRequest({ method: 'PATCH', url: `${hook}/messages/@original`, json: true, body: { ...body, allowed_mentions: { parse: [] } } });\n\nconst failure = (op === 'reopen' ? $('Reopen task').first().json : result).error;\nif (failure) {\n  // Todoist refused, so undo the optimistic answer and tell the person privately.\n  if (!keep_message) await patch({ content: message.content, components: message.components });\n  const verb = op === 'reopen' ? 'reopen' : 'complete';\n  await this.helpers.httpRequest({ method: 'POST', url: hook, json: true, body: { content: `Todoist did not ${verb} \"${name}\": ${failure.message ?? 'unknown error'}`, flags: 64, allowed_mentions: { parse: [] } } });\n  return [{ json: { ok: false } }];\n}\n\n// Once reopened, Todoist answers for the task again, so its due date and\n// priority can go back on the line. The assignee's name would need another lookup; it returns\n// with the task's next update.\nif (op === 'reopen' && result.id) {\n  const details = [];\n  if (result.due?.string) details.push(result.due.string);\n  if (result.priority > 1) details.push(`p${5 - result.priority}`);\n  if (details.length) {\n    const link = /[\\[\\]]/.test(name) ? name : `[${name}](<https://app.todoist.com/app/task/${task_id}>)`;\n    await patch({ content: [link, ...details].join(' · ') });\n  }\n}\nreturn [{ json: { ok: true } }];"
+      },
+      "id": "8c2e7d90-1b3a-4e6f-a5d4-2f9b0c7e0038",
+      "name": "After reopen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        600
       ]
     }
   ],
@@ -1373,14 +1468,14 @@
       "main": [
         [
           {
-            "node": "Should close",
+            "node": "Button action",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Should close": {
+    "Button action": {
       "main": [
         [
           {
@@ -1389,7 +1484,13 @@
             "index": 0
           }
         ],
-        []
+        [
+          {
+            "node": "Reopen task",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Close task (button)": {
@@ -1397,6 +1498,28 @@
         [
           {
             "node": "After close",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reopen task": {
+      "main": [
+        [
+          {
+            "node": "Get task (reopened)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get task (reopened)": {
+      "main": [
+        [
+          {
+            "node": "After reopen",
             "type": "main",
             "index": 0
           }

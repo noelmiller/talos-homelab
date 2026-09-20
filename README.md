@@ -405,8 +405,8 @@ through a `cloudflared` Deployment running a locally-managed Cloudflare
 Tunnel whose ingress rules live in git and publish `/webhook/` only.
 
 The first workflow relays Todoist task events (added, updated, completed,
-deleted) to a Discord channel per project as one-line messages with a Done
-button, verifying Todoist's HMAC signature first. A second one answers
+deleted) to a Discord channel per project as one-line messages with
+complete and undo buttons, verifying Todoist's HMAC signature first. A second one answers
 Discord slash commands that list, add, and complete tasks, and the button. See
 [16-n8n/README.md](16-n8n/README.md) for the tunnel, Todoist, and Discord
 setup.
