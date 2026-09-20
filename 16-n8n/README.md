@@ -94,11 +94,16 @@ Secret is committed.
 Todoist task is added, updated, completed, or deleted:
 
 ```
-➕ Pay school fees · 25 Sep · p1 · Sam      [Done]
-✏️ Pay school fees · Due: 25 Sep → 30 Sep
-✅ pretzel chips
-🗑️ Ranch dressing
+Pay school fees · 25 Sep · p1 · Sam          [✅]
+Pay school fees · Due: 25 Sep → 30 Sep
+~~pretzel chips~~ · completed
+Call plumber · reopened
+~~Ranch dressing~~ · deleted
 ```
+
+The task's name leads, with no icon: a new task is just the task, a finished
+one is struck through, and what happened is said in a word where the line
+would not show it.
 
 Webhook (`POST /webhook/todoist`, raw body) -> Code node that verifies
 `X-Todoist-Hmac-SHA256` and parses the event -> HTTP Request that lists the
@@ -130,25 +135,29 @@ only happens in shared projects; if that lookup fails it says "someone". The
 project (`in Work / Clients / Acme`) is appended only in the default channel,
 where several projects mix; in a project's own channel it would be redundant.
 
-### The Done button
+### The buttons
 With `DISCORD_BOT_TOKEN` set, the relay posts through Discord's bot API
 instead of the channel webhooks, because only a message sent by the
 application itself can carry a working button. The channel is the one the
 project's webhook points at, so the project map stays the single place that
-says where a project goes. A new task gets a Done button whose `custom_id` is
-`done:<task id>`; pressing it reaches the Discord workflow below.
+says where a project goes. An open task's message carries a small ✅ button
+(`custom_id` `done:<task id>`), a completed one a red ✖ undo button
+(`undo:<task id>`); pressing either reaches the Discord workflow below.
 
-- A press answers first and completes afterwards. The message becomes
-  `✅ ~~task~~ · who` with the button disabled, and only then is the task
-  closed in Todoist. If Todoist refuses, the message is put back and the
-  person is told privately.
-- A retired message keeps its disabled button on purpose. When Todoist then
-  reports the completion, the relay looks through the channel's last 100
-  messages for that task's button: disabled means someone pressed it and the
-  change they watched was the announcement, so nothing more is posted. Enabled
-  means the task was finished somewhere else: the message is retired and one
-  `✅` line is posted. Deletions work the same way with `🗑️`. Nothing is
-  stored; the button is the index.
+- A press answers first and changes Todoist afterwards. ✅ turns the message
+  into `~~task~~ · who` with the undo button and then closes the task; ✖ puts
+  the task's line back with the ✅ button and then reopens it, adding the due
+  date and priority once Todoist answers for the task again. If Todoist
+  refuses, the message is put back and the person is told privately.
+- The buttons are also the index: nothing is stored. When Todoist reports a
+  task completed, reopened, or deleted, the relay looks through the channel's
+  last 100 messages for that task's button. If the message already shows the
+  new state, someone pressed its button and watched it change, so nothing
+  more is posted. Otherwise the change was made somewhere else: the message is
+  switched over and one line is posted. A deleted task's message loses its
+  buttons.
+- Reopening elsewhere is only seen if `item:uncompleted` is ticked in the
+  Todoist app's webhook settings.
 - A recurring task only moves to its next date, so its message and button
   stay, and the person gets a private note.
 - Where the bot cannot post (no token, not a member, a private channel it was
@@ -214,8 +223,8 @@ Completions of recurring tasks are posted like any other; Todoist sends
    publish the workflow.
 5. Back in the Todoist app console, under Webhooks, set the callback URL to
    `https://hooks.noelmiller.dev/webhook/todoist`, select `item:added`,
-   `item:updated`, `item:completed`, and `item:deleted`, and activate the
-   webhook.
+   `item:updated`, `item:completed`, `item:uncompleted`, and `item:deleted`,
+   and activate the webhook.
 6. Connect the Todoist credential (next section). Todoist only delivers
    webhooks for users who authorized the app through OAuth, and the console's
    test token does not count; connecting the credential is that authorization.
@@ -262,8 +271,8 @@ racing to refresh at the same moment are within that minute.
 | Command | Does | Who sees the reply |
 |---|---|---|
 | `/tasks [project]` | lists a project's open tasks | the channel |
-| `/add task [due] [priority] [assignee]` | adds a task to the channel's project | the caller |
-| `/done task` | completes a task in the channel's project | the caller |
+| `/add task [due] [priority] [assignee] [description]` | adds a task to the channel's project | nobody, unless it fails |
+| `/done task` | completes a task in the channel's project | nobody, unless it fails |
 
 Discord delivers slash commands over HTTPS to an Interactions Endpoint URL,
 here `https://hooks.noelmiller.dev/webhook/discord`, so there is no bot
@@ -313,8 +322,10 @@ reply.
   so they answer with a private placeholder and delete it again, leaving the
   relay's line as the only message. Failures, and completing a recurring task
   (which the relay does not announce), keep a private reply.
-- A press of a Done button arrives at the same endpoint as a component
-  interaction; see "The Done button" above.
+- A press of a ✅ or ✖ button arrives at the same endpoint as a component
+  interaction; see "The buttons" above.
+- `/add` takes an optional `description`, stored in the task above the
+  "Added from Discord by" line.
 - All Todoist access goes through the same credential as the relay.
 
 ### Setup
@@ -329,7 +340,7 @@ reply.
    ```
    It prints a second install link with the `bot` scope and the View Channel,
    Send Messages, and Read Message History permissions. Open it once so the
-   bot becomes a member and can post the messages with Done buttons; add it
+   bot becomes a member and can post the messages with buttons; add it
    to any private channel it should post in. Run the script again whenever
    the commands or their options change, or the token is reset.
 3. Commit `sealed-n8n-discord-interactions.yaml`, merge, and let the pod roll.
