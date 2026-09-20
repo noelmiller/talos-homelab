@@ -64,6 +64,11 @@ spec:
                 secretKeyRef:
                   name: keycloak-argocd-client
                   key: client-secret
+            - name: OUTLINE_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-outline-client
+                  key: client-secret
             # GitHub OAuth App behind the `github` identity provider.
             - name: GITHUB_IDP_CLIENT_ID
               valueFrom:

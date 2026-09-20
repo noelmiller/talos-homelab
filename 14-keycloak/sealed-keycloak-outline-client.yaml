@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: keycloak-outline-client
+  namespace: keycloak
+spec:
+  encryptedData:
+    client-secret: AgA6MT9W46Z61MOU9LHL8dgpGPbwvJUurF6xDS3748GNCSgzSdXEtnUu3vMORX0M7H3X4vsLnd/Aft8zKunc1bW/9hwt40Af3ZkgBlDlS//bDJtzoxde289UpLPT72HvOWK7RlrygIYU7bP92PCBkd2ozB8BWRzMwRxQFCr/o9l606L7fj8cACmeqIiXTo5VgrdbnIIiB14g4VY2PbUo4Adq5re252KTYK0cirS+Z5aGwF6BuE9u26aYeEvXjjsEZH4JqmxXMmXQsBg7p4H3RbXW85+OqY3Yy3fW5gG1zuadt6h2wegz0zHkKxZZ14kp79wqY/oraKliT9F09WumwfObfFoqkc32UhbsGyXGWXPUNl5YOs0SivkDuuXnvaQbKp63PJWJxhRWDj1hdusUNnQ1IhUe/v5TK0/KVYHGp5Gq+7IDM0DB4JEp0euSWwpYfmmluNyusOkolfJd58bFOMkv69/LXzqsXObGwkL01x7zZxDGWDfSmGWsWp8ovOlBVEzjHaDkvfCiQbwOAmuD1qLaOBPwcI2BsqXfvPHwxn8h6TkQ0Wgnx0NWRQ3i0doIYzyrCzlm1U2c6UUNLHOYdwCLRp7oULmWMTpu2krf6+nnuV+CWVumrJOCMaPeybyal0xU/arXlPBB3+N/IrxSvuUGv8XtFandqzxZ2wq4R0K951w7VJOjF03kPx0ZS+DPbEDy4zjA2/rSgy89O5KgQuGYkmdvoKwaDYykIJQ0IdRTiemCoxaLeelps+pUafeZ7TA=
+  template:
+    metadata:
+      name: keycloak-outline-client
+      namespace: keycloak

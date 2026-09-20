@@ -185,6 +185,39 @@
       ]
     },
     {
+      "clientId": "outline",
+      "name": "Outline",
+      "description": "Wiki at outline.k8s.noelmiller.dev",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "$(env:OUTLINE_OIDC_CLIENT_SECRET)",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "rootUrl": "https://outline.k8s.noelmiller.dev",
+      "baseUrl": "/",
+      "redirectUris": [
+        "https://outline.k8s.noelmiller.dev/auth/oidc.callback"
+      ],
+      "webOrigins": [
+        "https://outline.k8s.noelmiller.dev"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "https://outline.k8s.noelmiller.dev"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "acr",
+        "profile",
+        "email",
+        "roles",
+        "web-origins"
+      ]
+    },
+    {
       "clientId": "argocd-cli",
       "name": "Argo CD CLI",
       "description": "`argocd login --sso`: public client, PKCE, loopback redirect only",
