@@ -53,7 +53,7 @@
         description: Workflow automation
         icon: n8n.png
     - Outline:
-        href: https://outline.k8s.noelmiller.dev
+        href: https://outline.k8s.noelmiller.dev/home
         description: Wiki and knowledge base
         icon: outline.png
     - UniFi:
