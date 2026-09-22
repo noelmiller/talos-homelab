@@ -254,6 +254,18 @@ The `monitoring` namespace runs the `kube-prometheus-stack` and Prometheus Black
 
 Blackbox probes cover every application-facing HTTP or TCP service in this repository, including the media stack, Homepage, ArgoCD, KubeVirt Manager, MySQL, both Minecraft servers, Palworld's cluster-internal REST endpoint, Grafana, and the Kubernetes API. The `ApplicationServiceUnavailable` alert fires after a probe has failed for five minutes, while `ApplicationServiceSlow` detects HTTP endpoints taking longer than five seconds.
 
+Palworld is probed with an authenticated request to `/v1/api/info` rather than a TCP connect, because a deadlocked game thread still accepts TCP connections. The blackbox exporter reads the admin password from the `blackbox-palworld-rest` Secret, which is the same value as `ADMIN_PASSWORD` in `09-palworld/sealed-secret.yaml` sealed for the `monitoring` namespace. Re-seal it whenever that password is rotated:
+
+```bash
+kubectl --context admin@k8s.noelmiller.dev -n palworld get secret palworld \
+  -o go-template='{{ index .data "ADMIN_PASSWORD" | base64decode }}' | \
+  kubectl create secret generic blackbox-palworld-rest -n monitoring \
+    --from-file=password=/dev/stdin --dry-run=client -o yaml | \
+  kubeseal --context admin@k8s.noelmiller.dev --controller-name sealed-secrets \
+    --controller-namespace kube-system --format yaml \
+  > 08-monitoring/sealed-blackbox-palworld-rest.yaml
+```
+
 Alerts are delivered to a Discord channel. Alertmanager reads the webhook URL from the `alertmanager-discord` Secret, committed as a `SealedSecret`. To create or rotate it, make a webhook in Discord (channel settings → Integrations → Webhooks), then seal it without leaving the URL in shell history:
 
 ```bash

@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - sealed-alertmanager-discord.yaml
+  - sealed-blackbox-palworld-rest.yaml
   - grafana-route.yaml
   - native-metrics.yaml
   - probes.yaml

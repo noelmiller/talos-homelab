@@ -53,7 +53,6 @@ spec:
         - ombi-mysql.media.svc.cluster.local:3306
         - minecraft.minecraft.svc.cluster.local:25565
         - minecraft-creative.minecraft.svc.cluster.local:25566
-        - palworld-monitoring.palworld.svc.cluster.local:8212
         - unifi-unifi-os-server-webui.unifi.svc.cluster.local:443
         - unifi-unifi-os-server-communication.unifi.svc.cluster.local:8080
         - forgejo-ssh.forgejo.svc.cluster.local:22
@@ -67,3 +66,26 @@ spec:
         # the MetalLB addresses. Fails if any hop in the public game path breaks.
         - 172.233.217.64:25565
         - 172.233.217.64:25566
+---
+# Palworld is probed through its authenticated REST API rather than a TCP
+# connect (see http_2xx_palworld in blackbox-exporter-values.yaml). It shares
+# the application-http job so the existing availability alerts apply.
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: palworld-rest
+  namespace: monitoring
+spec:
+  jobName: application-http
+  interval: 30s
+  scrapeTimeout: 15s
+  module: http_2xx_palworld
+  prober:
+    url: blackbox-exporter.monitoring.svc.cluster.local:9115
+    path: /probe
+  targets:
+    staticConfig:
+      labels:
+        service_type: http
+      static:
+        - http://palworld-monitoring.palworld.svc.cluster.local:8212/v1/api/info
