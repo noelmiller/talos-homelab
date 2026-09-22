@@ -277,7 +277,7 @@ Grafana is available at `https://grafana.k8s.noelmiller.dev`. It is configured f
 
 ## 9. Palworld server
 
-The Palworld dedicated server is available on the LAN at `10.42.0.14:8211` over UDP. MetalLB assigns the stable LAN address, while the server world, game installation, and built-in daily backups persist on a 50 GiB `nvme-2tb` PVC. The server and administrator passwords are stored in a namespace-scoped `SealedSecret`.
+The Palworld dedicated server is available on the LAN at `10.42.0.14:8211` over UDP. MetalLB assigns the stable LAN address, while the server world, game installation, and built-in daily backups persist on a 50 GiB `nvme-2tb` PVC. The server and administrator passwords are stored in a namespace-scoped `SealedSecret`. The readiness and liveness probes call the server's REST API (`/v1/api/info` on `8212`) rather than checking that the process exists, so a deadlocked game thread gets the pod restarted within about two minutes instead of sitting "alive" but unresponsive. The startup probe still uses `pgrep` because the REST API only opens once the world has loaded.
 
 The server is not exposed directly through the router or Cloudflare. The Linode relay is intended to forward the game and query UDP ports over WireGuard without publishing the home IP. Community-browser listing remains disabled until that tunnel and forwarding path are complete.
 
