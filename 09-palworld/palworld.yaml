@@ -64,12 +64,18 @@ spec:
                 - pgrep PalServer-Linux >/dev/null
             failureThreshold: 120
             periodSeconds: 5
+          # The readiness and liveness probes call the REST API instead of
+          # checking that the process exists. Palworld's game thread can
+          # deadlock while the process stays alive (UE5 "Hang detected on
+          # GameThread"), which a pgrep probe never notices. The admin password
+          # is piped through curl's config file so it never appears in argv.
           readinessProbe:
             exec:
               command:
                 - sh
                 - -c
-                - pgrep PalServer-Linux >/dev/null
+                - printf 'user = "admin:%s"\n' "$ADMIN_PASSWORD" | curl -sf --max-time 8 -K - -o /dev/null "http://127.0.0.1:${REST_API_PORT:-8212}/v1/api/info"
+            timeoutSeconds: 10
             failureThreshold: 3
             periodSeconds: 10
           livenessProbe:
@@ -77,8 +83,9 @@ spec:
               command:
                 - sh
                 - -c
-                - pgrep PalServer-Linux >/dev/null
-            failureThreshold: 3
+                - printf 'user = "admin:%s"\n' "$ADMIN_PASSWORD" | curl -sf --max-time 8 -K - -o /dev/null "http://127.0.0.1:${REST_API_PORT:-8212}/v1/api/info"
+            timeoutSeconds: 10
+            failureThreshold: 6
             periodSeconds: 20
           volumeMounts:
             - name: data
