@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: blackbox-palworld-rest
+  namespace: monitoring
+spec:
+  encryptedData:
+    password: AgBxylHBipwGjZfa64mFbgWVK2vR9Y3UljljzWGTm8ZFFgLrEwuhgtmGimnpow1ST/CHY1uid8ntxYq0WaAi7TwO0OpqHBhpfCJ3NDws3Q0p5vqV00N+8zTJd0VdcqyHAIruwQOQxTbda+YdamohYxgi4lKUEE9/z9FVrNDfGWnI6dTvoAK8wrXK9BkCL//o433jMVtxy0NtxYGMs0tKe3qAOrhtHvoY8EpHpwAVBBj2k5HuT7EeHw7eSi9n+QpnxqI5COMGj1+0xh0HPxBv6y4QzIlZpymU2iVAFhMLwZI7ndfSTMoxEiW5MFrZNzuCl6qBKIUoP5YpO9h4zDOWDrAnGFFbaGbhTwXezKztWCEf+A91X2LgcuK3ZHOlDYYRFYyQE61PtfOj9c6kuzw8++L5AhxDvihQY/C/y6I2rgSG9M7Z4f6G9Shn6U8U+kLPvv7Fi+idGP1vaOuaKVN8JxqlHHrtn8wunqGZ7X7/w859thr0/P9Ces+T1MJXov6pYRarRl2kA3jdxhgYX1E2qOSrzJR2gNrNXIQ3SCPx7msd6wFNQkwOi4QAuuKdwBgYnxZsi2ehPa1yTWvU9H4TUrwrDtsP6NSU1xf/iywd0tVrTeCUr2IsgCh009cCy9zneeV2Dg658g05vO0xAfk/YXmdi4lLo+qgh59A0XW1QiaAetc7c6QPkk/+7P9fcdOBMutgeOs8KcgaTUAHPYI9CgzL+WCl9+koZna1/+o+94Rztw==
+  template:
+    metadata:
+      name: blackbox-palworld-rest
+      namespace: monitoring
