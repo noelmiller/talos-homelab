@@ -25,7 +25,7 @@ helmCharts:
     repo: https://charts.bitnami.com/bitnami
     releaseName: n8n-postgresql
     namespace: n8n
-    version: 18.11.4
+    version: 18.12.2
     valuesFile: postgresql-values.yaml
 
 patches:

@@ -13,7 +13,7 @@ helmCharts:
     repo: https://charts.bitnami.com/bitnami
     releaseName: forgejo-postgresql
     namespace: forgejo
-    version: 18.11.4
+    version: 18.12.2
     valuesFile: postgresql-values.yaml
   - name: forgejo
     repo: oci://code.forgejo.org/forgejo-helm
