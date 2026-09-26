@@ -17,14 +17,14 @@ helmCharts:
     repo: https://prometheus-community.github.io/helm-charts
     releaseName: monitoring
     namespace: monitoring
-    version: 91.4.1
+    version: 91.5.3
     includeCRDs: true
     valuesFile: kube-prometheus-stack-values.yaml
   - name: prometheus-blackbox-exporter
     repo: https://prometheus-community.github.io/helm-charts
     releaseName: blackbox
     namespace: monitoring
-    version: 11.18.0
+    version: 11.19.1
     valuesFile: blackbox-exporter-values.yaml
 
 patches:

@@ -16,7 +16,7 @@ helmCharts:
     repo: https://charts.bitnami.com/bitnami
     releaseName: outline-postgresql
     namespace: outline
-    version: 18.11.4
+    version: 18.12.2
     valuesFile: postgresql-values.yaml
 
 patches:
