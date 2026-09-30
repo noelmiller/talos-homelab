@@ -62,7 +62,7 @@ spec:
         - n8n-postgresql.n8n.svc.cluster.local:5432
         - outline-postgresql.outline.svc.cluster.local:5432
         - outline-redis.outline.svc.cluster.local:6379
-        - bookorbit-postgresql.bookorbit.svc.cluster.local:5432
+        - bookorbit-db.bookorbit.svc.cluster.local:5432
         - kubernetes.default.svc.cluster.local:443
         # End-to-end through the Linode relay, Tailscale, and pfSense back to
         # the MetalLB addresses. Fails if any hop in the public game path breaks.

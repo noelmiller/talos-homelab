@@ -84,7 +84,7 @@ spec:
             # The entrypoint builds DATABASE_URL from these, percent-encoding
             # the password.
             - name: POSTGRES_HOST
-              value: bookorbit-postgresql
+              value: bookorbit-db
             - name: POSTGRES_PORT
               value: "5432"
             - name: POSTGRES_DB

@@ -3,16 +3,17 @@
 This application runs [BookOrbit](https://bookorbit.app), a library and
 reader for ebooks, PDFs, comics, and audiobooks, from the official
 `ghcr.io/bookorbit/bookorbit` image with an in-cluster PostgreSQL database,
-following the upstream `docker-compose.yml`. It is reachable at
+following the upstream `docker-compose.yml` (including its
+`pgvector/pgvector` database image). It is reachable at
 `https://bookorbit.k8s.noelmiller.dev` from the LAN, and users can sign in
 through Keycloak (`14-keycloak`) once the provider is added in the app (see
 below).
 
 ## Components
 - `namespace.yaml`: `bookorbit` namespace, `restricted` Pod Security.
-- `sealed-bookorbit-postgresql.yaml`: sealed PostgreSQL credentials (`password`, `postgres-password`).
+- `sealed-bookorbit-postgresql.yaml`: sealed PostgreSQL credentials (`password` is the `bookorbit` user's; `postgres-password` is left over from the Bitnami instance and unused).
 - `sealed-bookorbit-secrets.yaml`: sealed application secrets, all random: `jwt-secret`, `podcast-encryption-key`, `email-encryption-key`, `migration-encryption-key`, `book-request-encryption-key` (32 random bytes as hex each), and `setup-bootstrap-token`.
-- `postgresql-values.yaml`: Bitnami PostgreSQL chart values (10Gi on `nvme-2tb`), image pinned to the same PostgreSQL 18 digest as the other layers (it ships pgvector), an init script that creates the extensions, and the Velero `pg_dump` pre-backup hook.
+- `bookorbit-db.yaml`: PostgreSQL 18 with pgvector from the official `pgvector/pgvector` image (StatefulSet `bookorbit-db`, Service, and the `bookorbit-db-data` PVC, 10Gi on `nvme-2tb`), with the Velero `pg_dump` pre-backup hook.
 - `bookorbit.yaml`: the `bookorbit-data` PVC (20Gi on `nvme-2tb`, mounted at `/data`), the `bookorbit-books` PVC (500Gi nominal on `sata-8tb`, mounted at `/books`), the Deployment (1 replica, `Recreate`), and the Service (`3000`).
 - `bookorbit-route.yaml`: `HTTPRoute` for `bookorbit.k8s.noelmiller.dev` on `main-gateway`.
 - `seedbox-proxy/seedbox_proxy.py`: the `seedbox-proxy` sidecar (see "Book requests through the seedbox"), shipped as a generated ConfigMap.
@@ -48,20 +49,28 @@ Everything is passed as environment variables in `bookorbit.yaml`:
 Not deployed: the optional Kokoro text-to-speech container from upstream's
 `tts` compose profile.
 
-## PostgreSQL extensions
-Before every migration run BookOrbit executes `CREATE EXTENSION IF NOT EXISTS`
-for `uuid-ossp`, `pg_trgm`, `unaccent`, and `vector`. The first three are
-trusted extensions the database owner may create, but pgvector is not, so the
-`bookorbit` user cannot and the pod would crash-loop with `permission denied
-to create extension "vector"`. The chart's `primary.initdb.scripts` creates
-all four as `postgres` when the data directory is first initialised.
+## PostgreSQL and pgvector
+BookOrbit stores a 256-dimension embedding per book in a pgvector column with
+an HNSW cosine index, and creates its extensions (`uuid-ossp`, `pg_trgm`,
+`unaccent`, `vector`) itself before every migration run. pgvector is not a
+trusted extension, so `bookorbit` is the instance's superuser, as in
+upstream's compose file; the instance serves nothing else.
 
-It is a `.sh` script rather than `.sql` because the Bitnami image runs `.sql`
-init files as the application user. The setup sources the script after it
-has read the `*_FILE` secrets into `POSTGRESQL_*` variables, and `exit 1` on
-failure makes the container fail loudly. It runs until it has succeeded once
-on a volume and never again, so a database restored into an existing volume
-must already contain the extensions (a `pg_dump` does).
+The database runs the official `pgvector/pgvector` image, not the Bitnami
+PostgreSQL chart the other layers use. Bitnami's pgvector build contains
+AVX-512 instructions, which the node's Ryzen 7 5700X does not have: every
+embedding write killed the backend with SIGILL (`terminated by signal 4:
+Illegal instruction`), PostgreSQL restarted all connections, and BookOrbit
+exited, so library scans never finished. The official build is portable.
+The data was moved over with `pg_dump -Fc | pg_restore --no-owner` on
+2026-09-30. The Bitnami instance's volume (`data-bookorbit-postgresql-0`)
+was left in place, unused; delete the PVC and its PV once you no longer want
+it as a fallback.
+
+The container runs as the image's `postgres` user (999) with a read-only
+root filesystem; `PGDATA` is `/var/lib/postgresql/data/pgdata`, a
+subdirectory of the volume as upstream sets it. A `preStop` hook asks for a
+fast shutdown, because SIGTERM alone waits for BookOrbit's connection pool.
 
 ## First start and sign-in
 1. Read the one-time setup token:
@@ -190,17 +199,17 @@ BookOrbit's provider settings.
 ## Backups
 The daily Velero schedule (`15-velero`) covers the namespace: both volumes,
 and the PostgreSQL volume with a consistent `pg_dump` at
-`/bitnami/postgresql/backup/bookorbit.sql` written by the pre-backup hook.
+`/var/lib/postgresql/data/backup/bookorbit.sql` written by the pre-backup hook.
 The books volume is not labelled out of backups, since books are not
 re-downloadable the way the media library is; add
 `k8s.noelmiller.dev/backup-volume-data: "false"` to it if it grows too large
 for the B2 upload.
 
-The dump is taken with `--clean --if-exists`, so it drops and recreates
-`vector` and must be restored as `postgres`, not as `bookorbit`.
+The dump is taken with `--clean --if-exists`; restore it as `bookorbit`
+(the instance's superuser).
 
 ## Monitoring and dashboard
-- Blackbox probes check `bookorbit:3000/api/v1/health` (which also reports the database connection) and `bookorbit-postgresql:5432` (`08-monitoring/probes.yaml`). BookOrbit has no Prometheus endpoint.
+- Blackbox probes check `bookorbit:3000/api/v1/health` (which also reports the database connection) and `bookorbit-db:5432` (`08-monitoring/probes.yaml`). BookOrbit has no Prometheus endpoint.
 - Homepage lists BookOrbit in the Media group (`05-dashboard/config/services.yaml`).
 
 ## Not yet configured
