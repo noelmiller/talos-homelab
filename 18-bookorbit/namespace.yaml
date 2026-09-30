@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bookorbit
+  # BookOrbit runs as the image's `node` user (the entrypoint only needs root
+  # to chown bind mounts, which fsGroup covers here) and the Bitnami
+  # PostgreSQL image is non-root, so the namespace can enforce restricted.
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

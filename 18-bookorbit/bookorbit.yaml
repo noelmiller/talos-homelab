@@ -1,0 +1,218 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: bookorbit-data
+  namespace: bookorbit
+  labels:
+    app.kubernetes.io/name: bookorbit
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nvme-2tb
+  resources:
+    requests:
+      # /data: extracted covers, the Book Dock drop folder (book-bucket), and
+      # other app-managed files. Library metadata lives in PostgreSQL.
+      # local-path does not enforce the size.
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: bookorbit-books
+  namespace: bookorbit
+  labels:
+    app.kubernetes.io/name: bookorbit
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: sata-8tb
+  resources:
+    requests:
+      # /books: the library itself (ebooks, PDFs, comics, audiobooks). Nominal;
+      # local-path does not enforce the size.
+      storage: 500Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bookorbit
+  namespace: bookorbit
+  labels:
+    app.kubernetes.io/name: bookorbit
+spec:
+  replicas: 1
+  # Single instance on ReadWriteOnce volumes: never run two at once.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bookorbit
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: bookorbit
+    spec:
+      # The Service is named `bookorbit`, so service links would inject
+      # BOOKORBIT_PORT=tcp://... style variables into the environment.
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        # The image's `node` user. Started non-root, the entrypoint skips its
+        # chown/su-exec step and only checks that /data is writable, which
+        # fsGroup makes true for both volumes.
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: bookorbit
+          # Runs pending database migrations itself on every start.
+          image: ghcr.io/bookorbit/bookorbit:3.1.0@sha256:78b6eac18306eb7eba0dbf6592ecdee01b15f24de9a941cb853db4a0232d7999
+          env:
+            # Public URL, used for links in e-mails, Kobo and OPDS endpoints,
+            # and the OIDC callback (<APP_URL>/oauth2-callback). TLS
+            # terminates at Traefik.
+            - name: APP_URL
+              value: https://bookorbit.k8s.noelmiller.dev
+            - name: PORT
+              value: "3000"
+            - name: TZ
+              value: America/Chicago
+            # The entrypoint builds DATABASE_URL from these, percent-encoding
+            # the password.
+            - name: POSTGRES_HOST
+              value: bookorbit-postgresql
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DB
+              value: bookorbit
+            - name: POSTGRES_USER
+              value: bookorbit
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: bookorbit-postgresql
+                  key: password
+            # Signs login tokens; rotating it signs everyone out.
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: bookorbit-secrets
+                  key: jwt-secret
+            # The keys below encrypt data stored in PostgreSQL (podcast feed
+            # URLs, SMTP, migration-source, and download-client/indexer
+            # credentials). Rotating one makes that data unreadable.
+            - name: PODCAST_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: bookorbit-secrets
+                  key: podcast-encryption-key
+            - name: EMAIL_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: bookorbit-secrets
+                  key: email-encryption-key
+            - name: MIGRATION_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: bookorbit-secrets
+                  key: migration-encryption-key
+            - name: BOOK_REQUEST_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: bookorbit-secrets
+                  key: book-request-encryption-key
+            # Entered once in the setup wizard to create the first
+            # administrator.
+            - name: SETUP_BOOTSTRAP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: bookorbit-secrets
+                  key: setup-bootstrap-token
+            # The library folder picker starts at /books instead of the
+            # container's root.
+            - name: LIBRARY_BROWSE_ROOT
+              value: /books
+            # auth.k8s.noelmiller.dev resolves to the LAN Traefik address,
+            # which BookOrbit's SSRF guard rejects for OIDC discovery unless
+            # this is on.
+            - name: OIDC_ALLOW_LOCAL_ISSUERS
+              value: "true"
+            # Heap size is derived from the memory limit below (75% above
+            # 2 GiB, 65% below).
+            - name: NODE_MAX_OLD_SPACE_SIZE
+              value: auto
+            - name: LOG_LEVEL
+              value: info
+          ports:
+            - name: http
+              containerPort: 3000
+          startupProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            periodSeconds: 5
+            # First start runs every migration since the baseline schema.
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            # Matches upstream's compose file (read_only with a /tmp tmpfs).
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: books
+              mountPath: /books
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: bookorbit-data
+        - name: books
+          persistentVolumeClaim:
+            claimName: bookorbit-books
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bookorbit
+  namespace: bookorbit
+  labels:
+    app.kubernetes.io/name: bookorbit
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: bookorbit
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http

@@ -1,0 +1,66 @@
+image:
+  # Chart 18.x defaults to the floating `latest` tag, which would silently pull
+  # a new PostgreSQL major on any pod restart and refuse to start on the old
+  # data directory. Pin the same PostgreSQL 18.6.0 digest Coder, Forgejo,
+  # Keycloak, n8n, and Outline run so the node caches one image. Bump
+  # deliberately, with a backup. The image ships pgvector, which BookOrbit needs.
+  digest: sha256:b69d1fca390fb131639e86e820f248acfc5d911339dc884796f8009260c598d7
+
+auth:
+  username: bookorbit
+  database: bookorbit
+  existingSecret: bookorbit-postgresql
+  secretKeys:
+    adminPasswordKey: postgres-password
+    userPasswordKey: password
+
+primary:
+  initdb:
+    # BookOrbit creates its extensions itself before every migration run, but
+    # pgvector is not a trusted extension, so the `bookorbit` owner cannot
+    # create it. Create all four as the superuser when the data directory is
+    # first initialised; BookOrbit's CREATE EXTENSION IF NOT EXISTS is then a
+    # no-op. Bitnami runs `.sql` init files as the application user, hence a
+    # shell script, which its setup sources (so `exit 1` fails the setup
+    # instead of leaving a database BookOrbit cannot migrate) after it has read
+    # the *_FILE secrets into POSTGRESQL_* variables. Runs until it succeeds
+    # once on a volume, then never again.
+    scripts:
+      bookorbit-extensions.sh: |
+        PGPASSWORD="$POSTGRESQL_POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 \
+          -h 127.0.0.1 -p "$POSTGRESQL_PORT_NUMBER" -U postgres -d "$POSTGRESQL_DATABASE" <<'SQL' || exit 1
+        CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+        CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+        CREATE EXTENSION IF NOT EXISTS "unaccent";
+        CREATE EXTENSION IF NOT EXISTS "vector";
+        SQL
+  lifecycleHooks:
+    # PostgreSQL treats the kubelet's SIGTERM as a "smart" shutdown and waits
+    # for every client to disconnect. The application's connection pool never
+    # does, so after the grace period the container is killed and the next
+    # start runs crash recovery. Ask for a fast shutdown first.
+    preStop:
+      exec:
+        command: ["/bin/sh", "-c", "pg_ctl -D \"$PGDATA\" -m fast -w -t 25 stop"]
+  podAnnotations:
+    # Velero (15-velero) copies this volume while PostgreSQL is writing to it,
+    # which restores like a power cut. Before each backup it runs this in the
+    # container to leave a consistent logical dump next to the data directory,
+    # at /bitnami/postgresql/backup/<database>.sql. A failed dump marks the
+    # backup PartiallyFailed.
+    pre.hook.backup.velero.io/container: postgresql
+    pre.hook.backup.velero.io/timeout: 10m
+    pre.hook.backup.velero.io/on-error: Fail
+    pre.hook.backup.velero.io/command: >-
+      ["/bin/sh", "-c", "set -e; umask 077; d=/bitnami/postgresql/backup; mkdir -p \"$d\"; PGPASSWORD=\"$(cat \"$POSTGRES_PASSWORD_FILE\")\" pg_dump -U \"$POSTGRES_USER\" -d \"$POSTGRES_DATABASE\" --clean --if-exists -f \"$d/$POSTGRES_DATABASE.sql.tmp\"; mv \"$d/$POSTGRES_DATABASE.sql.tmp\" \"$d/$POSTGRES_DATABASE.sql\""]
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  persistence:
+    enabled: true
+    storageClass: nvme-2tb
+    size: 10Gi

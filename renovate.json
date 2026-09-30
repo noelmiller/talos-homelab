@@ -15,7 +15,8 @@
       "/^09-palworld/.+\\.yaml$/",
       "/^14-keycloak/.+\\.yaml$/",
       "/^16-n8n/.+\\.yaml$/",
-      "/^17-outline/.+\\.yaml$/"
+      "/^17-outline/.+\\.yaml$/",
+      "/^18-bookorbit/.+\\.yaml$/"
     ]
   },
   "customDatasources": {

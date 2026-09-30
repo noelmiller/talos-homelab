@@ -1,6 +1,6 @@
 # Keycloak
 
-Single sign-on for the cluster, currently used by Forgejo, Coder, Argo CD, and Outline. Keycloak runs from
+Single sign-on for the cluster, currently used by Forgejo, Coder, Argo CD, Outline, and BookOrbit. Keycloak runs from
 the official `quay.io/keycloak/keycloak` image in production mode with an
 in-cluster PostgreSQL database and is reachable at
 `https://auth.k8s.noelmiller.dev`.
@@ -13,6 +13,7 @@ in-cluster PostgreSQL database and is reachable at
 - `sealed-keycloak-coder-client.yaml`: sealed OIDC client secret for Coder (`client-secret`). The same value is sealed for the `coder` namespace in `12-coder/sealed-coder-keycloak-oidc.yaml`.
 - `sealed-keycloak-argocd-client.yaml`: sealed OIDC client secret for Argo CD (`client-secret`). The same value is sealed for the `argocd` namespace in `02-configuration/sealed-argocd-keycloak-oidc.yaml`.
 - `sealed-keycloak-outline-client.yaml`: sealed OIDC client secret for Outline (`client-secret`). The same value is sealed for the `outline` namespace in `17-outline/sealed-outline-keycloak-oidc.yaml`.
+- `sealed-keycloak-bookorbit-client.yaml`: sealed OIDC client secret for BookOrbit (`client-secret`). BookOrbit keeps its provider settings in its own database, so this is the only copy in git; see `18-bookorbit/README.md`.
 - `sealed-keycloak-github-idp.yaml`: sealed GitHub OAuth App credentials for the `github` identity provider (`client-id`, `client-secret`).
 - `postgresql-values.yaml`: Bitnami PostgreSQL chart values (10Gi on `nvme-2tb`), image pinned to the same PostgreSQL 18 digest as Coder and Forgejo.
 - `keycloak.yaml`: Deployment (1 replica, `Recreate`), Service (`8080` http, `9000` management), and a ServiceMonitor for `/metrics`.
@@ -36,13 +37,14 @@ five minutes.
 - confidential client `forgejo` with redirect URI `https://git.k8s.noelmiller.dev/user/oauth2/keycloak/callback` and the `groups` scope by default;
 - confidential client `coder` with redirect URI `https://coder.k8s.noelmiller.dev/api/v2/users/oidc/callback` and `offline_access` as an optional scope (Coder requests it to get a long-lived refresh token);
 - confidential client `argocd` with redirect URI `https://argocd.k8s.noelmiller.dev/auth/callback`, and public PKCE client `argocd-cli` with the loopback redirect `http://localhost:8085/auth/callback` for `argocd login --sso`; both carry the `groups` scope by default;
-- confidential client `outline` with redirect URI `https://outline.k8s.noelmiller.dev/auth/oidc.callback` and post-logout redirect URI `https://outline.k8s.noelmiller.dev` (Outline signs out through Keycloak's end-session endpoint and comes back to its own login page).
+- confidential client `outline` with redirect URI `https://outline.k8s.noelmiller.dev/auth/oidc.callback` and post-logout redirect URI `https://outline.k8s.noelmiller.dev` (Outline signs out through Keycloak's end-session endpoint and comes back to its own login page);
+- confidential client `bookorbit` with redirect URIs `https://bookorbit.k8s.noelmiller.dev/oauth2-callback` (web) and `bookorbit://oauth2-callback` (iPhone app), PKCE S256 required, and back-channel logout to `https://bookorbit.k8s.noelmiller.dev/api/v1/auth/oidc/backchannel-logout`.
 
 `realm-import-job.yaml` runs [keycloak-config-cli](https://github.com/adorsys/keycloak-config-cli)
 as an Argo CD PostSync hook after every successful sync. The client secret
 placeholders `$(env:FORGEJO_OAUTH_CLIENT_SECRET)`,
 `$(env:CODER_OIDC_CLIENT_SECRET)`, `$(env:ARGOCD_OIDC_CLIENT_SECRET)`,
-`$(env:OUTLINE_OIDC_CLIENT_SECRET)`, and `$(env:GITHUB_IDP_CLIENT_ID)` /
+`$(env:OUTLINE_OIDC_CLIENT_SECRET)`, `$(env:BOOKORBIT_OIDC_CLIENT_SECRET)`, and `$(env:GITHUB_IDP_CLIENT_ID)` /
 `$(env:GITHUB_IDP_CLIENT_SECRET)` are resolved from the sealed Secrets at
 import time, so the secrets never appear in git. The Job creates
 and updates the declared objects but is configured with `no-delete` for
@@ -88,6 +90,9 @@ major version. Bump both together when a new CLI release appears.
    `https://outline.k8s.noelmiller.dev` and choose **Continue with Keycloak**.
    The first user to sign in creates the workspace and is its administrator;
    see `17-outline/README.md`.
+8. For BookOrbit, the provider is added in the app itself after the first
+   administrator exists; see "First start and sign-in" in
+   `18-bookorbit/README.md`.
 
 ## Sign in with GitHub
 The login page offers a **GitHub** button, which Forgejo and Coder inherit
@@ -197,6 +202,18 @@ kubectl create secret generic outline-keycloak-oidc --namespace outline \
   kubeseal --format yaml --controller-name sealed-secrets --controller-namespace kube-system \
   > 17-outline/sealed-outline-keycloak-oidc.yaml
 unset client_secret
+```
+
+BookOrbit client secret (sealed for the `keycloak` namespace only; after the
+next sync, paste the new value into the Keycloak provider in BookOrbit's OIDC
+settings, read back with
+`kubectl -n keycloak get secret keycloak-bookorbit-client -o jsonpath='{.data.client-secret}' | base64 -d`):
+
+```sh
+kubectl create secret generic keycloak-bookorbit-client --namespace keycloak \
+  --from-literal=client-secret="$(openssl rand -hex 32)" --dry-run=client -o yaml |
+  kubeseal --format yaml --controller-name sealed-secrets --controller-namespace kube-system \
+  > 14-keycloak/sealed-keycloak-bookorbit-client.yaml
 ```
 
 GitHub identity provider (client ID from the OAuth App page, then generate a

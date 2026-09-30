@@ -1,4 +1,8 @@
 - Media:
+    - BookOrbit:
+        href: https://bookorbit.k8s.noelmiller.dev
+        description: Read books, comics & audiobooks
+        icon: bookorbit.png
     - Jellyfin:
         href: https://jellyfin.k8s.noelmiller.dev
         description: Watch movies & TV
