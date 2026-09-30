@@ -3,30 +3,16 @@ kind: Kustomization
 
 resources:
   - namespace.yaml
-  - sealed-keycloak-postgresql.yaml
-  - sealed-keycloak-admin.yaml
-  - sealed-keycloak-forgejo-client.yaml
-  - sealed-keycloak-coder-client.yaml
-  - sealed-keycloak-argocd-client.yaml
-  - sealed-keycloak-outline-client.yaml
-  - sealed-keycloak-bookorbit-client.yaml
-  - sealed-keycloak-github-idp.yaml
-  - keycloak.yaml
-  - keycloak-route.yaml
-  - realm-import-job.yaml
-
-# Hashed name: editing the realm file rolls the import Job.
-configMapGenerator:
-  - name: keycloak-realm
-    namespace: keycloak
-    files:
-      - realm-homelab.json
+  - sealed-bookorbit-postgresql.yaml
+  - sealed-bookorbit-secrets.yaml
+  - bookorbit.yaml
+  - bookorbit-route.yaml
 
 helmCharts:
   - name: postgresql
     repo: https://charts.bitnami.com/bitnami
-    releaseName: keycloak-postgresql
-    namespace: keycloak
+    releaseName: bookorbit-postgresql
+    namespace: bookorbit
     version: 18.12.2
     valuesFile: postgresql-values.yaml
 

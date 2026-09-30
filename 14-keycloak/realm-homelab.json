@@ -218,6 +218,42 @@
       ]
     },
     {
+      "clientId": "bookorbit",
+      "name": "BookOrbit",
+      "description": "Book library at bookorbit.k8s.noelmiller.dev",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "$(env:BOOKORBIT_OIDC_CLIENT_SECRET)",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "rootUrl": "https://bookorbit.k8s.noelmiller.dev",
+      "baseUrl": "/",
+      "redirectUris": [
+        "https://bookorbit.k8s.noelmiller.dev/oauth2-callback",
+        "bookorbit://oauth2-callback"
+      ],
+      "webOrigins": [
+        "https://bookorbit.k8s.noelmiller.dev"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "backchannel.logout.url": "https://bookorbit.k8s.noelmiller.dev/api/v1/auth/oidc/backchannel-logout",
+        "backchannel.logout.session.required": "true"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "acr",
+        "profile",
+        "email",
+        "roles",
+        "web-origins"
+      ]
+    },
+    {
       "clientId": "argocd-cli",
       "name": "Argo CD CLI",
       "description": "`argocd login --sso`: public client, PKCE, loopback redirect only",

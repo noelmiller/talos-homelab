@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: keycloak-bookorbit-client
+  namespace: keycloak
+spec:
+  encryptedData:
+    client-secret: AgA7nxLZOd08AHqnLXRjSDrz/bKkJZZiJ1ewvjMS9s4nGcjph2g9Q81LIoJob9VA/2QVg97kU9FV7s2Pcbf2ZIYqmNUnrYLu/YsN0ZXHvTHUWHzOI2WA4zs6kFZFhKtMO6KzAgvJfnqoinn3vXdtZQ6cRLPX8iwl80YvEP+hByO8xgrw7IuSEKSraroW9EYtO0S7YmzjNO+1QcXV5MKNF+KAEkmevbZxXeLENeM9ksPjMQCLZaRgiLXY6WKWHiXvXcpzbUIDm7kD69n7EUPhcClWARwjn/tM0XS5Ugb5exBEeMYY5vyEl8+5IWwZD/9vc3dLYZs7Ww5bHTw4OAu0NJGGevNcLx6GrXU577siWGRsJ5pYPf98dbb9vJNXLWemh73xilppT/6Fc7bEeirfZn6Bnh48034Eac8cAcFEk/5ln/QqikEGiWESFFL3J8pfqt0ex1OkAZLhVRrcK5UjCMkU6EdGZsixP6porqweLFdEqnmeOp59YqtPFY9l6sylJgyu6eeNYLd7ZyoQTmqo2C3M3kkRCMru1rjugeVNTFGK9j7hIQiTRucWeU9/Ppbj7Jtv6C7/wtITwF5Q7rH4POdYUJj7ZSkHAfpeS8g8T5wkJ/fKmjRsq51R/RUabxIzGT43EZWQCW2RWk4HzYAex6b8TjSaTot81GO8iaEQXb9rtqCNxrGqykNqMfGsZJ+L15OLDyDo+76aIOxPtYUGttvHHR+jtmRhCORy/+xNRjgda6RlKpx0kHT5eEHxOi0UwsY4p0RE1K3MfuW1V+HdHuLQ
+  template:
+    metadata:
+      name: keycloak-bookorbit-client
+      namespace: keycloak
