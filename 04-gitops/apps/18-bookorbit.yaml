@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: https://github.com/noelmiller/talos-homelab.git
     targetRevision: main
-    path: 17-bookorbit
+    path: 18-bookorbit
   destination:
     server: https://kubernetes.default.svc
     namespace: bookorbit
