@@ -191,6 +191,79 @@ spec:
               mountPath: /books
             - name: tmp
               mountPath: /tmp
+        # Transmission RPC proxy in front of the seedbox (seedbox-proxy/). BookOrbit's
+        # Transmission client talks to it on localhost:9091; it reports a finished
+        # torrent as still downloading until it has copied the files over FTPS into
+        # /data/seedbox, which BookOrbit's path mapping points at. Same volume as the
+        # Book Dock, so the import can hardlink instead of copying.
+        - name: seedbox-proxy
+          image: python:3.14.7-alpine3.24@sha256:9e9fde4d32eedce0b661d9ab91e826b62dddf28e928c230ec55f1866cac66b01
+          command: ["python", "-u", "/app/seedbox_proxy.py"]
+          env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            # The RPC path is appended from BookOrbit's request. Basic auth is
+            # BookOrbit's own Transmission login, passed through, never stored here.
+            - name: UPSTREAM_URL
+              value: https://rapidseedbox91832-tr.basic-003.seedbox.vip
+            - name: CATEGORY
+              value: bookorbit
+            - name: LOCAL_ROOT
+              value: /data/seedbox
+            # FTPS (explicit TLS, certificate verified). The FTP login is chrooted
+            # into Transmission's download directory, so that directory is `/`.
+            - name: FTP_HOST
+              value: basic-003.seedbox.vip
+            - name: FTP_PORT
+              value: "21"
+            - name: FTP_ROOT
+              value: /
+            - name: FTP_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: seedbox-ftp
+                  key: username
+            - name: FTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: seedbox-ftp
+                  key: password
+            - name: RETENTION_DAYS
+              value: "7"
+          ports:
+            - name: transmission
+              containerPort: 9091
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: transmission
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: transmission
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: seedbox-proxy
+              mountPath: /app
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -200,6 +273,9 @@ spec:
             claimName: bookorbit-books
         - name: tmp
           emptyDir: {}
+        - name: seedbox-proxy
+          configMap:
+            name: seedbox-proxy
 ---
 apiVersion: v1
 kind: Service
