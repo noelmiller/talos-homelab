@@ -39,7 +39,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-UPSTREAM = os.environ["UPSTREAM_URL"].rstrip("/")  # e.g. https://host (RPC path is forwarded as-is)
+UPSTREAM = os.environ["UPSTREAM_URL"].rstrip("/")  # e.g. https://host
+# Where the seedbox serves Transmission's RPC. BookOrbit always calls /transmission/rpc; some
+# seedboxes put the daemon's RPC elsewhere behind their web front end.
+UPSTREAM_RPC_PATH = os.environ.get("UPSTREAM_RPC_PATH", "/transmission/rpc")
 CATEGORY = os.environ.get("CATEGORY", "bookorbit").strip("/")  # the category set on BookOrbit's client
 LOCAL_ROOT = os.environ["LOCAL_ROOT"].rstrip("/")  # where the category folder is mirrored for BookOrbit
 FTP_ROOT = os.environ.get("FTP_ROOT", "/").rstrip("/")  # download-dir as the FTP login sees it
@@ -290,12 +293,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.reply(404, {"Content-Type": "text/plain"}, b"not found\n")
 
     def do_POST(self):
-        if self.path.split("?", 1)[0] != RPC_PATH:
+        path, _, query = self.path.partition("?")
+        if path != RPC_PATH:
             self.reply(404, {"Content-Type": "text/plain"}, b"not found\n")
             return
         body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
         forward = {k: v for k, v in self.headers.items() if k.lower() in ("authorization", "content-type", "x-transmission-session-id")}
-        request = urllib.request.Request(UPSTREAM + self.path, data=body, headers=forward, method="POST")
+        target = UPSTREAM + UPSTREAM_RPC_PATH + (f"?{query}" if query else "")
+        request = urllib.request.Request(target, data=body, headers=forward, method="POST")
         try:
             with upstream.open(request, timeout=30) as response:
                 status, headers, data = response.status, response.headers, response.read()
