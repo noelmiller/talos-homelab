@@ -113,7 +113,8 @@ that finds nothing there fails the attempt, so the files have to be home
 BookOrbit pod does that:
 
 - It listens on `localhost:9091` and forwards every Transmission RPC call to
-  the seedbox unchanged, including BookOrbit's own Transmission login (basic
+  the seedbox's RPC endpoint (`/rpc` on this seedbox, not the standard
+  `/transmission/rpc`, which answers POST with 405; `UPSTREAM_RPC_PATH`), including BookOrbit's own Transmission login (basic
   auth) and the `X-Transmission-Session-Id` handshake. It never stores that
   login.
 - In `torrent-get` answers, a finished torrent in the `bookorbit` category

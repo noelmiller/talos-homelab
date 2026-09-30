@@ -202,10 +202,14 @@ spec:
           env:
             - name: PYTHONDONTWRITEBYTECODE
               value: "1"
-            # The RPC path is appended from BookOrbit's request. Basic auth is
-            # BookOrbit's own Transmission login, passed through, never stored here.
+            # Basic auth is BookOrbit's own Transmission login, passed through,
+            # never stored here.
             - name: UPSTREAM_URL
               value: https://rapidseedbox91832-tr.basic-003.seedbox.vip
+            # This seedbox serves Transmission RPC at /rpc (its /transmission/rpc
+            # only accepts GET and answers BookOrbit's POST with 405).
+            - name: UPSTREAM_RPC_PATH
+              value: /rpc
             - name: CATEGORY
               value: bookorbit
             - name: LOCAL_ROOT
