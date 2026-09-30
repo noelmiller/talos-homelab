@@ -15,6 +15,8 @@ below).
 - `postgresql-values.yaml`: Bitnami PostgreSQL chart values (10Gi on `nvme-2tb`), image pinned to the same PostgreSQL 18 digest as the other layers (it ships pgvector), an init script that creates the extensions, and the Velero `pg_dump` pre-backup hook.
 - `bookorbit.yaml`: the `bookorbit-data` PVC (20Gi on `nvme-2tb`, mounted at `/data`), the `bookorbit-books` PVC (500Gi nominal on `sata-8tb`, mounted at `/books`), the Deployment (1 replica, `Recreate`), and the Service (`3000`).
 - `bookorbit-route.yaml`: `HTTPRoute` for `bookorbit.k8s.noelmiller.dev` on `main-gateway`.
+- `seedbox-proxy/seedbox_proxy.py`: the `seedbox-proxy` sidecar (see "Book requests through the seedbox"), shipped as a generated ConfigMap.
+- `sealed-seedbox-ftp.yaml`: sealed seedbox FTP login (`username`, `password`), written by `seal-seedbox-ftp.sh`.
 
 ## Runtime configuration
 Everything is passed as environment variables in `bookorbit.yaml`:
@@ -101,6 +103,57 @@ The library lives on the `bookorbit-books` volume at `/books`. Create a
 library pointing at a folder there, then upload through the browser, or copy
 files in with `kubectl cp` (into the library folder, or into the Book Dock
 drop folder under `/data` for automatic import).
+
+## Book requests through the seedbox
+Book requests download through Transmission on the RapidSeedbox
+(`rapidseedbox91832-tr.basic-003.seedbox.vip`). BookOrbit imports a download
+from a local path as soon as Transmission reports it finished, and an import
+that finds nothing there fails the attempt, so the files have to be home
+*before* BookOrbit hears "finished". The `seedbox-proxy` container in the
+BookOrbit pod does that:
+
+- It listens on `localhost:9091` and forwards every Transmission RPC call to
+  the seedbox unchanged, including BookOrbit's own Transmission login (basic
+  auth) and the `X-Transmission-Session-Id` handshake. It never stores that
+  login.
+- In `torrent-get` answers, a finished torrent in the `bookorbit` category
+  folder is reported as still downloading (status 4, 99%) until the proxy has
+  copied its files over FTPS into `/data/seedbox/<name>`. After that the real
+  status passes through and BookOrbit imports the local copy.
+- BookOrbit keeps a category's torrents in `<download-dir>/<category>` and
+  asks Transmission for `download-dir` before every add; the proxy learns the
+  folder from that answer and keeps it in `/data/seedbox/.proxy/download-dir`,
+  so no seedbox path is configured here. The FTP login is chrooted into that
+  download directory (`FTP_ROOT=/`).
+- A copy lands in a staging folder and is renamed into place, and
+  `/data/seedbox/.proxy/done/<hash>` is written only after that, so a restart
+  simply starts an unfinished copy again. Failures are retried every minute.
+- `/data/seedbox` is on the same volume as the Book Dock, so the import
+  hardlinks instead of copying. Local copies are deleted seven days after they
+  land (`RETENTION_DAYS`); the done markers stay so a torrent BookOrbit still
+  watches for seeding is never fetched again. Seeding stays on the seedbox.
+- FTPS uses explicit TLS with certificate verification, capped at TLS 1.2
+  because vsftpd requires data connections to resume the control connection's
+  TLS session, which Python can only offer immediately on 1.2.
+
+Settings in BookOrbit (Settings > System > Requests):
+
+1. Download client **Transmission**: URL `http://localhost:9091`, the
+   seedbox's Transmission username and password, category `bookorbit`, and
+   allow private addresses (the proxy is on `localhost`, which BookOrbit
+   otherwise refuses).
+2. Path mapping for that client: remote path `<download-dir>/bookorbit`, local
+   path `/data/seedbox`. "Test connection" asks Transmission for its session,
+   so after one test the proxy logs `learned download-dir=...` with the value
+   to use: `kubectl -n bookorbit logs deploy/bookorbit -c seedbox-proxy`.
+3. Indexers: add them directly or through Prowlarr.
+
+Only torrents in the `bookorbit` folder are touched; anything else on the
+seedbox (added by hand, other categories) passes through untouched.
+
+To change the FTP login, run `bash 18-bookorbit/seal-seedbox-ftp.sh` in a
+terminal (it prompts without echoing), commit, and delete the BookOrbit pod
+once Argo CD has synced.
 
 ## Rotating credentials
 PostgreSQL (BookOrbit reads the password at startup; rotate it in the

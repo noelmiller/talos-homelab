@@ -5,8 +5,16 @@ resources:
   - namespace.yaml
   - sealed-bookorbit-postgresql.yaml
   - sealed-bookorbit-secrets.yaml
+  - sealed-seedbox-ftp.yaml
   - bookorbit.yaml
   - bookorbit-route.yaml
+
+configMapGenerator:
+  # The seedbox-proxy sidecar's script; the name hash rolls the pod when it changes.
+  - name: seedbox-proxy
+    namespace: bookorbit
+    files:
+      - seedbox-proxy/seedbox_proxy.py
 
 helmCharts:
   - name: postgresql
