@@ -36,6 +36,7 @@ import ssl
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 UPSTREAM = os.environ["UPSTREAM_URL"].rstrip("/")  # e.g. https://host (RPC path is forwarded as-is)
@@ -61,6 +62,25 @@ TMP_DIR = os.path.join(STATE_DIR, "tmp")
 DOWNLOAD_DIR_FILE = os.path.join(STATE_DIR, "download-dir")
 
 log = logging.getLogger("seedbox-proxy")
+
+
+class KeepPostRedirect(urllib.request.HTTPRedirectHandler):
+    """Follow a redirect on the seedbox's own host as the same POST.
+
+    urllib turns a redirected POST into a bodiless GET, which Transmission answers with 405.
+    A redirect to any other host is passed back to BookOrbit instead of followed, so the
+    Transmission login is never sent anywhere else.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if urllib.parse.urlsplit(newurl).netloc != urllib.parse.urlsplit(UPSTREAM).netloc:
+            log.warning("upstream redirected %s to another host (%s); not followed", code, newurl)
+            return None
+        log.info("upstream redirected %s %s -> %s", code, req.full_url, newurl)
+        return urllib.request.Request(newurl, data=req.data, headers=dict(req.header_items()), method=req.get_method())
+
+
+upstream = urllib.request.build_opener(KeepPostRedirect)
 jobs: "queue.Queue[dict]" = queue.Queue()
 queued: set = set()
 queued_lock = threading.Lock()
@@ -277,7 +297,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         forward = {k: v for k, v in self.headers.items() if k.lower() in ("authorization", "content-type", "x-transmission-session-id")}
         request = urllib.request.Request(UPSTREAM + self.path, data=body, headers=forward, method="POST")
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
+            with upstream.open(request, timeout=30) as response:
                 status, headers, data = response.status, response.headers, response.read()
         except urllib.error.HTTPError as error:  # 401 and the 409 session handshake pass through
             status, headers, data = error.code, error.headers, error.read()
@@ -286,6 +306,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.reply(502, {"Content-Type": "text/plain"}, b"seedbox unreachable\n")
             return
 
+        if status not in (200, 409):  # 409 is Transmission's session-id handshake
+            log.warning("upstream answered %s (allow=%s, location=%s)", status, headers.get("Allow"), headers.get("Location"))
         if status == 200:
             try:
                 method = json.loads(body or b"{}").get("method")
