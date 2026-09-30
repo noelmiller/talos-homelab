@@ -444,8 +444,8 @@ the ISP's SMTP relay. See
 
 The `bookorbit` namespace runs [BookOrbit](https://bookorbit.app), a library
 and reader for ebooks, PDFs, comics, and audiobooks, from the official image
-(raw manifests, Renovate-pinned) with a Bitnami PostgreSQL instance (pgvector
-created at init), a 20Gi app-data volume on `nvme-2tb`, and a books volume
+(raw manifests, Renovate-pinned) with PostgreSQL from the official pgvector
+image (Bitnami's pgvector needs AVX-512, which the node lacks), a 20Gi app-data volume on `nvme-2tb`, and a books volume
 on `sata-8tb`, exposed at `https://bookorbit.k8s.noelmiller.dev` (LAN only)
 through the shared Gateway. Pod Security is `restricted`.
 

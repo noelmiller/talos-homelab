@@ -17,14 +17,6 @@ configMapGenerator:
     files:
       - seedbox-proxy/seedbox_proxy.py
 
-helmCharts:
-  - name: postgresql
-    repo: https://charts.bitnami.com/bitnami
-    releaseName: bookorbit-postgresql
-    namespace: bookorbit
-    version: 18.12.2
-    valuesFile: postgresql-values.yaml
-
 patches:
   # Never let an Argo CD prune or a cascading Application delete remove a PVC.
   # Data lives on local disks and is not reproducible from git.
