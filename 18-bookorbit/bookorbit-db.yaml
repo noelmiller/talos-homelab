@@ -1,0 +1,153 @@
+# PostgreSQL from the official pgvector image, as upstream's compose file runs it.
+# Replaces the Bitnami chart: Bitnami's pgvector is compiled with AVX-512, which the
+# node's Ryzen 7 5700X lacks, so every embedding write killed the backend with
+# SIGILL ("Illegal instruction") and took BookOrbit down with it. This build is
+# portable (runtime CPU dispatch).
+#
+# `bookorbit` is the instance's superuser, as in upstream's compose file: the
+# instance serves nothing else, and BookOrbit can then create the untrusted
+# `vector` extension itself before its migrations.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: bookorbit-db-data
+  namespace: bookorbit
+  labels:
+    app.kubernetes.io/name: bookorbit-db
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nvme-2tb
+  resources:
+    requests:
+      # local-path does not enforce the size.
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: bookorbit-db
+  namespace: bookorbit
+  labels:
+    app.kubernetes.io/name: bookorbit-db
+spec:
+  replicas: 1
+  serviceName: bookorbit-db
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bookorbit-db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: bookorbit-db
+      annotations:
+        # Velero (15-velero) copies this volume while PostgreSQL is writing to it,
+        # which restores like a power cut. Before each backup it leaves a
+        # consistent logical dump next to the data directory, at
+        # /var/lib/postgresql/data/backup/bookorbit.sql (local socket, trusted by
+        # the image's pg_hba.conf). A failed dump marks the backup PartiallyFailed.
+        pre.hook.backup.velero.io/container: postgres
+        pre.hook.backup.velero.io/timeout: 10m
+        pre.hook.backup.velero.io/on-error: Fail
+        pre.hook.backup.velero.io/command: >-
+          ["/bin/sh", "-c", "set -e; umask 077; d=/var/lib/postgresql/data/backup; mkdir -p \"$d\"; pg_dump -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" --clean --if-exists -f \"$d/$POSTGRES_DB.sql.tmp\"; mv \"$d/$POSTGRES_DB.sql.tmp\" \"$d/$POSTGRES_DB.sql\""]
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        # The image's `postgres` user. The entrypoint supports starting as it
+        # directly when the data directory is writable, which fsGroup ensures.
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: postgres
+          image: pgvector/pgvector:0.8.6-pg18-trixie@sha256:78bf48b801e792f99e3ac62b5036fd3876e9be48afda16c1e331af1c75ceb2ff
+          env:
+            - name: POSTGRES_USER
+              value: bookorbit
+            - name: POSTGRES_DB
+              value: bookorbit
+            # The same Secret the Bitnami instance used, so BookOrbit's
+            # POSTGRES_PASSWORD stays valid across the switch.
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: bookorbit-postgresql
+                  key: password
+            # A subdirectory of the mount, as upstream's compose file sets it.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          lifecycle:
+            # SIGTERM is a "smart" shutdown that waits for BookOrbit's pool to
+            # disconnect, which it never does before the grace period ends.
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "pg_ctl -D \"$PGDATA\" -m fast -w -t 25 stop"]
+          startupProbe:
+            exec:
+              command: ["/bin/sh", "-c", "pg_isready -h 127.0.0.1 -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "pg_isready -h 127.0.0.1 -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "pg_isready -h 127.0.0.1 -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: bookorbit-db-data
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bookorbit-db
+  namespace: bookorbit
+  labels:
+    app.kubernetes.io/name: bookorbit-db
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: bookorbit-db
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
