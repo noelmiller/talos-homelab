@@ -197,7 +197,7 @@ spec:
         # /data/seedbox, which BookOrbit's path mapping points at. Same volume as the
         # Book Dock, so the import can hardlink instead of copying.
         - name: seedbox-proxy
-          image: python:3.14.7-alpine3.24@sha256:9e9fde4d32eedce0b661d9ab91e826b62dddf28e928c230ec55f1866cac66b01
+          image: python:3.14.8-alpine3.24@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
           command: ["python", "-u", "/app/seedbox_proxy.py"]
           env:
             - name: PYTHONDONTWRITEBYTECODE
