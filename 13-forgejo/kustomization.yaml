@@ -19,7 +19,7 @@ helmCharts:
     repo: oci://code.forgejo.org/forgejo-helm
     releaseName: forgejo
     namespace: forgejo
-    version: 17.1.7
+    version: 17.2.0
     valuesFile: forgejo-values.yaml
 
 patches:
