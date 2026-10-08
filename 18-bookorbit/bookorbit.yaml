@@ -70,7 +70,7 @@ spec:
       containers:
         - name: bookorbit
           # Runs pending database migrations itself on every start.
-          image: ghcr.io/bookorbit/bookorbit:3.1.0@sha256:78b6eac18306eb7eba0dbf6592ecdee01b15f24de9a941cb853db4a0232d7999
+          image: ghcr.io/bookorbit/bookorbit:3.3.0@sha256:4c2a1b957a3c8aeb9f59bb27a7d8efb18fa42c758afed3dcfc62620c5bcd1831
           env:
             # Public URL, used for links in e-mails, Kobo and OPDS endpoints,
             # and the OIDC callback (<APP_URL>/oauth2-callback). TLS
