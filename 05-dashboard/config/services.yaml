@@ -49,9 +49,6 @@
         href: https://auth.k8s.noelmiller.dev
         description: Single sign-on
         icon: keycloak.png
-    - KubeVirt Manager:
-        href: https://kubevirt.k8s.noelmiller.dev
-        description: Virtual machine management
     - n8n:
         href: https://n8n.k8s.noelmiller.dev
         description: Workflow automation
