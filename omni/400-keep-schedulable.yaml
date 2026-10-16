@@ -1,0 +1,29 @@
+# Cluster-wide patch for the single node. The description still names KubeVirt
+# and Multus, which were removed on 2026-10-16; it is kept as it is live.
+metadata:
+  namespace: default
+  type: ConfigPatches.omni.sidero.dev
+  id: 400-k8s-noelmiller-dev-keep-schedulable
+  labels:
+    omni.sidero.dev/cluster: k8s-noelmiller-dev
+  annotations:
+    description: Single-node cluster; drop the default control-plane NoSchedule
+      taint and the exclude-from-external-load-balancers label so pods schedule
+      and MetalLB keeps announcing. Drop SecurityProfileConfig so the container
+      plane stays in the host PID/mount namespace (KubeVirt, Multus, node-exporter,
+      UniFi, Velero rely on it), matching the pre-Omni node.
+    name: Keep single node schedulable, in MetalLB, and non-isolated
+spec:
+  data: |
+    apiVersion: v1alpha1
+    kind: KubeNodeConfig
+    taints:
+      node-role.kubernetes.io/control-plane:
+        $patch: delete
+    labels:
+      node.kubernetes.io/exclude-from-external-load-balancers:
+        $patch: delete
+    ---
+    apiVersion: v1alpha1
+    kind: SecurityProfileConfig
+    $patch: delete
