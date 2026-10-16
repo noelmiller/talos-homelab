@@ -1,0 +1,100 @@
+# Machine config imported from the pre-Omni Talos node on 2026-10-15: data
+# disks, br0 bridge, kubelet serving-cert rotation, hostname, nameserver, and
+# the SideroLink connection to Omni.
+#
+# SECRET: the live patch carries the SideroLink join token in apiUrl. It is
+# replaced with a placeholder here because this repository is public. Before
+# `omnictl apply -f omni/10-import-patch.yaml`, put the real token back in a
+# local, uncommitted copy (read it from
+# `omnictl get configpatches 10-2e65eefd-4204-ef1a-81c4-04421aef81c5 -o yaml`),
+# or the node loses its connection to Omni.
+metadata:
+  namespace: default
+  type: ConfigPatches.omni.sidero.dev
+  id: 10-2e65eefd-4204-ef1a-81c4-04421aef81c5
+  labels:
+    omni.sidero.dev/cluster: k8s-noelmiller-dev
+    omni.sidero.dev/cluster-machine: 2e65eefd-4204-ef1a-81c4-04421aef81c5
+  annotations:
+    description: Config patch imported from existing Talos node
+    name: User defined patch
+spec:
+  data: |-
+    apiVersion: v1alpha1
+    kind: UserVolumeConfig
+    name: nvme-2tb
+    provisioning:
+      diskSelector:
+        match: disk.wwid == 'eui.000000000000000100a0752133e574c3'
+      maxSize: 1850GiB
+      minSize: 1800GiB
+    ---
+    apiVersion: v1alpha1
+    kind: UserVolumeConfig
+    name: sata-8tb
+    provisioning:
+      diskSelector:
+        match: disk.wwid == 'naa.5002538f33b14c59'
+      maxSize: 7400GiB
+      minSize: 7000GiB
+    ---
+    apiVersion: v1alpha1
+    kind: UserVolumeConfig
+    name: sata-1tb
+    provisioning:
+      diskSelector:
+        match: disk.wwid == 'naa.500a0751e8b00131'
+      maxSize: 925GiB
+      minSize: 900GiB
+    ---
+    apiUrl: https://noelmiller.siderolink.na-west-2.omni.siderolabs.io?jointoken=<SIDEROLINK_JOIN_TOKEN>
+    apiVersion: v1alpha1
+    kind: SideroLinkConfig
+    ---
+    apiVersion: v1alpha1
+    endpoint: '[fdae:41e4:649b:9303::1]:8090'
+    kind: EventSinkConfig
+    ---
+    apiVersion: v1alpha1
+    kind: KmsgLogConfig
+    name: omni-kmsg
+    url: tcp://[fdae:41e4:649b:9303::1]:8092
+    ---
+    apiVersion: v1alpha1
+    auto:
+      $patch: delete
+    hostname: k8s.noelmiller.dev
+    kind: HostnameConfig
+    ---
+    machine:
+      network:
+        interfaces:
+          - dhcp: false
+            interface: enp6s0
+          - addresses:
+              - 10.42.0.2/24
+            bridge:
+              interfaces:
+                - enp6s0
+              stp:
+                enabled: true
+            interface: br0
+            routes:
+              - gateway: 10.42.0.1
+                metric: 1024
+                network: 0.0.0.0/0
+    version: v1alpha1
+    ---
+    apiVersion: v1alpha1
+    kind: KubeletConfig
+    config:
+      serverTLSBootstrap: true
+    ---
+    apiVersion: v1alpha1
+    kind: KubeNodeConfig
+    registerWithFQDN: true
+    ---
+    apiVersion: v1alpha1
+    kind: ResolverConfig
+    nameservers:
+      - address: 10.42.0.1
