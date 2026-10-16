@@ -24,7 +24,6 @@ spec:
         - http://sonarr.media.svc.cluster.local:8989/
         - https://dashboard.k8s.noelmiller.dev/
         - http://argocd-server.argocd.svc.cluster.local/
-        - http://kubevirt-manager.kubevirt-manager.svc.cluster.local:8080/
         - http://monitoring-grafana.monitoring.svc.cluster.local/
         - http://coder.coder.svc.cluster.local/healthz
         - http://forgejo-http.forgejo.svc.cluster.local:3000/api/healthz

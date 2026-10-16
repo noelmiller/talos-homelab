@@ -1,5 +1,4 @@
-# The default namespace hosts the shared Gateway, the `lan` NetworkAttachmentDefinition,
-# and any KubeVirt VMs. baseline admits virt-launcher pods; restricted would not.
+# The default namespace hosts the shared Gateway.
 apiVersion: v1
 kind: Namespace
 metadata:

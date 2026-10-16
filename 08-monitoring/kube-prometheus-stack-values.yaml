@@ -58,13 +58,6 @@ alertmanager:
         - receiver: "null"
           matchers:
             - alertname =~ "Watchdog|InfoInhibitor"
-        # "Default storage class has no smart clone or ReadWriteMany" is
-        # permanently true on a single node with local-path, and harmless:
-        # CDI falls back to host-assisted copy. The rule belongs to the CDI
-        # operator, which reverts edits, so drop it here instead.
-        - receiver: "null"
-          matchers:
-            - alertname = CDIDefaultStorageClassDegraded
     receivers:
       - name: "null"
       - name: discord

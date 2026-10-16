@@ -21,7 +21,6 @@ metrics-server-kubelet-patch.yaml Talos KubeletConfig patch enabling serving-cer
 03-media/                         Media app stack (Jellyfin/Ombi/Sonarr/Radarr/Prowlarr/SABnzbd)
 04-gitops/                        ArgoCD app-of-apps definitions
 05-dashboard/                     Homepage cluster dashboard
-06-virtualization/                KubeVirt, CDI, Multus, and kubevirt-manager
 07-minecraft/                     Paper Minecraft server with Bedrock cross-play
 08-monitoring/                    Prometheus, Grafana, exporters, probes, and alerts
 09-palworld/                      Palworld dedicated server and persistent storage
@@ -196,7 +195,7 @@ Once ArgoCD is running (from step 3), bootstrap the app-of-apps pattern **once**
 kubectl apply -f 04-gitops/root-app.yaml
 ```
 
-This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, `virtualization`, `minecraft`, `monitoring`, `palworld`, `unifi`, `coder`, `forgejo`, `keycloak`, `velero`, `n8n`, `outline`, and `bookorbit`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
+This creates the `root` Application, which watches `04-gitops/apps/` and creates one child `Application` per layer (`infrastructure`, `configuration`, `media`, `dashboard`, `minecraft`, `monitoring`, `palworld`, `unifi`, `coder`, `forgejo`, `keycloak`, `velero`, `n8n`, `outline`, and `bookorbit`) — including one pointing back at `01-infrastructure`, so ArgoCD manages its own upgrades too.
 
 From here on, the workflow is just:
 
@@ -208,7 +207,7 @@ ArgoCD polls the repo and auto-syncs + self-heals drift. Force an immediate sync
 
 ### Do not `kubectl apply --server-side` over ArgoCD-managed layers
 
-The bootstrap command in step 3 is for a cluster ArgoCD does not manage yet. Run by hand later, it leaves a `kubectl` field manager co-owning every field it touched. `monitoring`, `virtualization`, `coder`, `forgejo`, `keycloak`, `velero`, `n8n`, `outline`, and `bookorbit` sync with `ServerSideApply=true`, where a field is only deleted once its *last* manager drops it: a field removed in git then stays live while the Application still reports `Synced` (this is how a removed node-exporter CPU limit survived a sync). Use `kubectl diff` or `--dry-run=server` to try things out, which record nothing.
+The bootstrap command in step 3 is for a cluster ArgoCD does not manage yet. Run by hand later, it leaves a `kubectl` field manager co-owning every field it touched. `monitoring`, `coder`, `forgejo`, `keycloak`, `velero`, `n8n`, `outline`, and `bookorbit` sync with `ServerSideApply=true`, where a field is only deleted once its *last* manager drops it: a field removed in git then stays live while the Application still reports `Synced` (this is how a removed node-exporter CPU limit survived a sync). Use `kubectl diff` or `--dry-run=server` to try things out, which record nothing.
 
 After merging a change that *removes* a field from one of those layers, check the live object rather than trusting `Synced`. If a stale manager shows up in `kubectl get <kind> <name> --show-managed-fields -o yaml`, make it relinquish by server-side-applying a manifest holding only `apiVersion`, `kind`, `metadata.name`, and `metadata.namespace` with `--field-manager=<stale manager>`; fields that manager alone owned are deleted, everything ArgoCD also owns is untouched.
 
@@ -253,7 +252,7 @@ Palworld publishes itself in the community browser with the Linode address
 
 The `monitoring` namespace runs the `kube-prometheus-stack` and Prometheus Blackbox Exporter. Prometheus retains up to 15 days or 25 GB of metrics on a 30 GiB `sata-1tb` PVC. It collects Kubernetes API, kubelet/cAdvisor, node-exporter, and kube-state-metrics data, providing cluster, node, namespace, pod, container, and persistent-volume telemetry. Native metrics from ArgoCD, Traefik, cert-manager, sealed-secrets, and all metrics-capable components installed by the stack are discovered through PodMonitor and ServiceMonitor resources.
 
-Blackbox probes cover every application-facing HTTP or TCP service in this repository, including the media stack, Homepage, ArgoCD, KubeVirt Manager, MySQL, both Minecraft servers, Palworld's cluster-internal REST endpoint, Grafana, and the Kubernetes API. The `ApplicationServiceUnavailable` alert fires after a probe has failed for five minutes, while `ApplicationServiceSlow` detects HTTP endpoints taking longer than five seconds.
+Blackbox probes cover every application-facing HTTP or TCP service in this repository, including the media stack, Homepage, ArgoCD, MySQL, both Minecraft servers, Palworld's cluster-internal REST endpoint, Grafana, and the Kubernetes API. The `ApplicationServiceUnavailable` alert fires after a probe has failed for five minutes, while `ApplicationServiceSlow` detects HTTP endpoints taking longer than five seconds.
 
 Palworld is probed with an authenticated request to `/v1/api/info` rather than a TCP connect, because a deadlocked game thread still accepts TCP connections. The blackbox exporter reads the admin password from the `blackbox-palworld-rest` Secret, which is the same value as `ADMIN_PASSWORD` in `09-palworld/sealed-secret.yaml` sealed for the `monitoring` namespace. Re-seal it whenever that password is rotated:
 
@@ -278,7 +277,7 @@ kubectl create secret generic alertmanager-discord -n monitoring \
 unset DISCORD_WEBHOOK
 ```
 
-The `monitoring` kustomization references this file, so the layer does not build (and ArgoCD makes no changes) until it exists. `Watchdog`, `InfoInhibitor`, and CDI's `CDIDefaultStorageClassDegraded` (permanently true on a single node with local-path storage: no ReadWriteMany, no smart clone) are routed to a null receiver; everything else, including resolved notifications, goes to Discord. kube-proxy is not scraped, for the same reason as the other Talos control-plane components: its metrics port only listens on localhost. Test delivery by port-forwarding Alertmanager and posting a synthetic alert:
+The `monitoring` kustomization references this file, so the layer does not build (and ArgoCD makes no changes) until it exists. `Watchdog` and `InfoInhibitor` are routed to a null receiver; everything else, including resolved notifications, goes to Discord. kube-proxy is not scraped, for the same reason as the other Talos control-plane components: its metrics port only listens on localhost. Test delivery by port-forwarding Alertmanager and posting a synthetic alert:
 
 ```bash
 kubectl -n monitoring port-forward svc/monitoring-kube-prometheus-alertmanager 9093 &
@@ -460,20 +459,7 @@ settings (the `bookorbit` client is in the realm). See
 - The cluster's MetalLB pool (`10.42.0.11-10.42.0.48`) is **private/LAN-only** — reachable from your home network, not the public internet. For external access you'd additionally need a public DNS record and port-forwarding/tunnel.
 - The one HTTP path published to the internet is `https://hooks.noelmiller.dev/webhook/*`, which a Cloudflare Tunnel in the `n8n` namespace forwards to n8n's production webhooks. It dials out to Cloudflare, so no port is forwarded and Traefik is not involved; every other path on that hostname returns 404. See [16-n8n/README.md](16-n8n/README.md).
 - Point any local DNS override (e.g. a router's custom DNS zone) at the **Gateway/Traefik Service's external IP** (`kubectl -n traefik get svc traefik`), not the node's own IP — they're not the same thing, and only the Service IP has anything actually listening on 80/443.
-- KubeVirt Manager is available at `https://kubevirt.k8s.noelmiller.dev` and is intended only for the trusted LAN. It has broad VM-management permissions and does not enable authentication by default.
-- KubeVirt VMs use the Talos-managed `br0` bridge and the `lan` Multus network to join the physical LAN. Apply [talos-kubevirt-network-patch.yaml](talos-kubevirt-network-patch.yaml) to move the node address and default route from `enp6s0` to `br0`:
-  ```bash
-  talosctl machineconfig patch controlplane.yaml \
-    --patch @talos-kubevirt-network-patch.yaml \
-    --output controlplane-kubevirt.yaml
-  yq eval -i \
-    '(. | select(.kind == "HostnameConfig")) |= (del(.auto) | .hostname = "k8s.noelmiller.dev")' \
-    controlplane-kubevirt.yaml
-  talosctl validate --config controlplane-kubevirt.yaml --mode metal --strict
-  talosctl --talosconfig talosconfig -n 10.42.0.2 apply-config \
-    --mode try --timeout 5m --file controlplane-kubevirt.yaml
-  ```
-  Verify `br0`, node health, and Kubernetes access before the timeout. Talos automatically rolls the change back if connectivity is lost. The node's original bare-metal network configuration may also exist in META key `0x0a`; back it up with `talosctl get meta 0x0a -o yaml`, then remove it with `talosctl meta delete 0x0a` to prevent the node IP from being assigned to both `enp6s0` and `br0`. Once only `br0` owns the address and the cluster is healthy, persist the full generated config with `apply-config --mode auto`.
+- The node's address and default route live on a Talos-managed `br0` bridge over `enp6s0`, set up by [talos-kubevirt-network-patch.yaml](talos-kubevirt-network-patch.yaml) and now carried by the Omni import patch. It was added so KubeVirt VMs could join the LAN; KubeVirt, CDI, Multus, and kubevirt-manager were removed in October 2026, and the bridge was kept for Talos's built-in virtualization.
 
 ## Data-safety notes
 
@@ -490,5 +476,5 @@ settings (the `bookorbit` client is in the realm). See
 
 - `talosconfig`, `controlplane.yaml`, `worker.yaml`, and `cloudflare-secret.yaml` are gitignored — they contain cluster PKI private keys, join tokens, and a plaintext API token. Never commit them.
 - All in-repo secrets are `SealedSecret`s, decryptable only by the sealed-secrets controller running in this specific cluster.
-- Every namespace carries [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/) labels. `argocd`, `traefik`, `cert-manager`, `kubevirt-manager`, `minecraft`, `palworld`, `forgejo`, `keycloak`, `n8n`, `outline`, and `bookorbit` enforce `restricted`; `dashboard`, `coder`, and `default` enforce `baseline` (Homepage runs as root, Coder workspaces may need capabilities, VMs need `virt-launcher`) and warn at `restricted`; `media`, `monitoring`, `unifi`, `kubevirt`, `cdi`, `metallb-system`, and `local-path-storage` are `privileged` because a workload in each genuinely needs it. Check `kubectl label --dry-run=server --overwrite ns <ns> pod-security.kubernetes.io/enforce=restricted` before tightening one.
+- Every namespace carries [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/) labels. `argocd`, `traefik`, `cert-manager`, `minecraft`, `palworld`, `forgejo`, `keycloak`, `n8n`, `outline`, and `bookorbit` enforce `restricted`; `dashboard`, `coder`, and `default` enforce `baseline` (Homepage runs as root, Coder workspaces may need capabilities) and warn at `restricted`; `media`, `monitoring`, `unifi`, `metallb-system`, and `local-path-storage` are `privileged` because a workload in each genuinely needs it. Check `kubectl label --dry-run=server --overwrite ns <ns> pod-security.kubernetes.io/enforce=restricted` before tightening one.
 - Resource requests on the media stack, Homepage, and Coder were sized from seven days of Prometheus data (peak working-set memory, p95 CPU) with memory limits at roughly three times the observed peak and no CPU limits on bursty workloads such as Jellyfin transcoding.

@@ -44,21 +44,6 @@
     },
     {
       "customType": "regex",
-      "description": "kubevirt-manager bundle: the version appears twice in the URL, so rewrite the whole string. Uses its own depName so the generic manager's match for this URL can be disabled below.",
-      "managerFilePatterns": [
-        "/^06-virtualization/kustomization\\.yaml$/"
-      ],
-      "matchStrings": [
-        "https://github\\.com/kubevirt-manager/kubevirt-manager/releases/download/(?<currentValue>v[\\d.]+)/bundled-v[\\d.]+\\.yaml"
-      ],
-      "depNameTemplate": "kubevirt-manager-bundle",
-      "datasourceTemplate": "github-releases",
-      "versioningTemplate": "semver-coerced",
-      "autoReplaceStringTemplate": "https://github.com/kubevirt-manager/kubevirt-manager/releases/download/{{{newValue}}}/bundled-{{{newValue}}}.yaml",
-      "packageNameTemplate": "kubevirt-manager/kubevirt-manager"
-    },
-    {
-      "customType": "regex",
       "description": "Velero object-store plugin, an init container image inside the chart values, pinned by tag and digest",
       "managerFilePatterns": [
         "/^15-velero/velero-values\\.yaml$/"
@@ -133,24 +118,6 @@
         "HelmChart"
       ],
       "groupName": "cluster helm charts"
-    },
-    {
-      "description": "The generic URL manager also sees the kubevirt-manager bundle but would only rewrite the first of the two version occurrences; the dedicated manager above handles it",
-      "matchDepNames": [
-        "kubevirt-manager/kubevirt-manager"
-      ],
-      "enabled": false
-    },
-    {
-      "description": "KubeVirt and CDI release together; bump them in one PR",
-      "matchDatasources": [
-        "github-releases"
-      ],
-      "matchPackageNames": [
-        "kubevirt/kubevirt",
-        "kubevirt/containerized-data-importer"
-      ],
-      "groupName": "kubevirt"
     },
     {
       "description": "Geyser and Floodgate move together with Paper; bump them in one PR",
