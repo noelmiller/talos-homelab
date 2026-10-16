@@ -53,6 +53,10 @@
         href: https://n8n.k8s.noelmiller.dev
         description: Workflow automation
         icon: n8n.png
+    - Omni:
+        href: https://noelmiller.na-west-2.omni.siderolabs.io
+        description: Talos cluster management
+        icon: talos.png
     - Outline:
         href: https://outline.k8s.noelmiller.dev/home
         description: Wiki and knowledge base
