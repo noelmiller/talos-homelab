@@ -9,9 +9,15 @@
 # Run under bash in a real terminal: ./16-n8n/setup-discord-command.sh
 set -euo pipefail
 
-CTX=admin@k8s.noelmiller.dev
+# The Omni-issued kubeconfig, passed explicitly: the current kubectl context may
+# be another cluster, whose controller would seal values the homelab cannot read.
+KUBECONFIG_FILE="${HOMELAB_KUBECONFIG:-$HOME/.talos/omni-k8s-noelmiller-dev/kubeconfig}"
 NAME=n8n-discord-interactions
 OUT="$(cd "$(dirname "$0")" && pwd)/sealed-$NAME.yaml"
+
+# Checked before anything is registered with Discord, so a missing file does
+# not leave the commands registered and the secret unsealed.
+[[ -f "$KUBECONFIG_FILE" ]] || { echo "no kubeconfig at $KUBECONFIG_FILE; get one with: omnictl kubeconfig -c k8s-noelmiller-dev $KUBECONFIG_FILE" >&2; exit 1; }
 
 echo "From https://discord.com/developers/applications > your application:"
 read -rp "Application ID (General Information): " app_id
@@ -83,7 +89,7 @@ read -rp "Public Key (General Information): " public_key
 kubectl create secret generic "$NAME" --namespace n8n \
   --from-literal=public-key="$public_key" --from-literal=guild-id="$guild_id" \
   --from-literal=bot-token="$bot_token" --dry-run=client -o yaml |
-  kubeseal --context "$CTX" --format yaml \
+  kubeseal --kubeconfig "$KUBECONFIG_FILE" --format yaml \
     --controller-name sealed-secrets --controller-namespace kube-system > "$OUT.tmp"
 unset bot_token
 grep -q '^kind: SealedSecret' "$OUT.tmp" || { echo "sealing failed" >&2; rm -f "$OUT.tmp"; exit 1; }
