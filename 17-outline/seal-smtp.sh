@@ -5,8 +5,15 @@
 #   kubectl -n outline rollout restart deploy/outline
 set -euo pipefail
 
-context="${KUBE_CONTEXT:-admin@k8s.noelmiller.dev}"
+# The Omni-issued kubeconfig, passed explicitly: the current kubectl context may
+# be another cluster, whose controller would seal values the homelab cannot read.
+kubeconfig="${HOMELAB_KUBECONFIG:-$HOME/.talos/omni-k8s-noelmiller-dev/kubeconfig}"
 out="$(cd "$(dirname "$0")" && pwd)/sealed-outline-smtp.yaml"
+
+if [ ! -f "$kubeconfig" ]; then
+  echo "No kubeconfig at $kubeconfig; get one with: omnictl kubeconfig -c k8s-noelmiller-dev $kubeconfig" >&2
+  exit 1
+fi
 
 read -rp "SMTP username (smtp.midco.net): " username
 read -rsp "SMTP password: " password; echo
@@ -27,7 +34,7 @@ kubectl create secret generic outline-smtp --namespace outline \
   --from-literal=password="$password" \
   --from-literal=from-email="$from_email" \
   --dry-run=client -o yaml |
-  kubeseal --context "$context" --format yaml \
+  kubeseal --kubeconfig "$kubeconfig" --format yaml \
     --controller-name sealed-secrets --controller-namespace kube-system \
     > "$out.tmp"
 mv "$out.tmp" "$out"

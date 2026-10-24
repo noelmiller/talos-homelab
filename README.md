@@ -289,11 +289,12 @@ Blackbox probes cover every application-facing HTTP or TCP service in this repos
 Palworld is probed with an authenticated request to `/v1/api/info` rather than a TCP connect, because a deadlocked game thread still accepts TCP connections. The blackbox exporter reads the admin password from the `blackbox-palworld-rest` Secret, which is the same value as `ADMIN_PASSWORD` in `09-palworld/sealed-secret.yaml` sealed for the `monitoring` namespace. Re-seal it whenever that password is rotated:
 
 ```bash
-kubectl --context admin@k8s.noelmiller.dev -n palworld get secret palworld \
+kubeconfig=~/.talos/omni-k8s-noelmiller-dev/kubeconfig
+kubectl --kubeconfig "$kubeconfig" -n palworld get secret palworld \
   -o go-template='{{ index .data "ADMIN_PASSWORD" | base64decode }}' | \
   kubectl create secret generic blackbox-palworld-rest -n monitoring \
     --from-file=password=/dev/stdin --dry-run=client -o yaml | \
-  kubeseal --context admin@k8s.noelmiller.dev --controller-name sealed-secrets \
+  kubeseal --kubeconfig "$kubeconfig" --controller-name sealed-secrets \
     --controller-namespace kube-system --format yaml \
   > 08-monitoring/sealed-blackbox-palworld-rest.yaml
 ```

@@ -9,12 +9,18 @@
 # Run under bash in a real terminal: ./16-n8n/seal-project-webhook.sh
 set -euo pipefail
 
-CTX=admin@k8s.noelmiller.dev
+# The Omni-issued kubeconfig, passed explicitly: the current kubectl context may
+# be another cluster, whose controller would seal values the homelab cannot read.
+KUBECONFIG_FILE="${HOMELAB_KUBECONFIG:-$HOME/.talos/omni-k8s-noelmiller-dev/kubeconfig}"
 NAME=n8n-discord-project-webhooks
 KEY=project-webhooks
 OUT="$(cd "$(dirname "$0")" && pwd)/sealed-$NAME.yaml"
 
-map=$(kubectl --context "$CTX" -n n8n get secret "$NAME" -o "jsonpath={.data.$KEY}" 2>/dev/null | base64 -d || true)
+[[ -f "$KUBECONFIG_FILE" ]] || { echo "no kubeconfig at $KUBECONFIG_FILE; get one with: omnictl kubeconfig -c k8s-noelmiller-dev $KUBECONFIG_FILE" >&2; exit 1; }
+
+# A missing Secret means an empty map, but any other error (sign-in, network)
+# must stop here: resealing from an empty map would drop every existing entry.
+map=$(kubectl --kubeconfig "$KUBECONFIG_FILE" -n n8n get secret "$NAME" --ignore-not-found -o "jsonpath={.data.$KEY}" | base64 -d)
 [[ -n "$map" ]] || map='{}'
 jq -e 'type == "object"' >/dev/null <<<"$map" || { echo "the live map is not a JSON object" >&2; exit 1; }
 
@@ -45,7 +51,7 @@ unset url
 
 kubectl create secret generic "$NAME" --namespace n8n \
   --from-literal="$KEY=$(jq -c . <<<"$map")" --dry-run=client -o yaml |
-  kubeseal --context "$CTX" --format yaml \
+  kubeseal --kubeconfig "$KUBECONFIG_FILE" --format yaml \
     --controller-name sealed-secrets --controller-namespace kube-system > "$OUT.tmp"
 grep -q '^kind: SealedSecret' "$OUT.tmp" || { echo "sealing failed" >&2; rm -f "$OUT.tmp"; exit 1; }
 mv "$OUT.tmp" "$OUT"
