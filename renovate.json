@@ -127,6 +127,16 @@
       "groupName": "geyser"
     },
     {
+      "description": "Geyser 2.12 requires Java Edition 26.3; hold it until Paper moves to 26.3, which waits on distant-horizons-support supporting 26.3",
+      "matchDatasources": [
+        "custom.geysermc"
+      ],
+      "matchPackageNames": [
+        "geyser"
+      ],
+      "allowedVersions": "/^2\\.11\\./"
+    },
+    {
       "matchFileNames": [
         "**/charts/**"
       ],
