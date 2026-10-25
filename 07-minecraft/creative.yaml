@@ -27,7 +27,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: minecraft
-          image: itzg/minecraft-server:2026.10.0-java25@sha256:5a2ab74ae179c11e2dbbce67f307cdcf2c1257b3abb0f654d3a310b3d8ea57da
+          image: itzg/minecraft-server:2026.10.1-java25@sha256:d12aed7e35981dfe259b60fbfee77d23a19b5898a7a31dca298d18b47b7b5776
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -89,7 +89,7 @@ spec:
               subPath: bedrock-whitelist.json
               readOnly: true
         - name: backup
-          image: itzg/mc-backup:2026.10.0@sha256:1943652c60b70036e9ec62fe76c90fea6a053851fb969daa275563f549492be1
+          image: itzg/mc-backup:2026.10.1@sha256:c5f2c369bbe47d0b712601bf44af5927e67a18cb5816dc378efb45eb993dab0a
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
