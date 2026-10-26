@@ -50,7 +50,7 @@ spec:
       containers:
         - name: outline
           # Runs pending database migrations itself on every start.
-          image: outlinewiki/outline:1.10.1@sha256:832051f039b446c87aa23929cf92c00980c66aaa2d744d118c48c016ec816ad8
+          image: outlinewiki/outline:1.12.0@sha256:25d6a2ced2f1f0cf03c09abd776d87ba31941ed96d3a99992aa84b3bd0afc074
           env:
             # Public URL. TLS terminates at Traefik, which also redirects
             # port 80, so Outline serves plain HTTP and trusts X-Forwarded-*
