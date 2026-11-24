@@ -32,7 +32,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: redis
-          image: redis:8.10.2-alpine@sha256:9f8d2d789b9a1d1e3f283f979aa9cbf393373806472e1ccd460e2f9c869b833b
+          image: redis:8.12.0-alpine@sha256:5af80107c1eeecb484a2269b80a26d12bfa6521787da4663bd9f19f60a163483
           args:
             - --save
             - ""
